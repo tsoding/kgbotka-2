@@ -54,6 +54,25 @@ void nick(SSL *ssl, String_View nickname)
     SSL_write(ssl, "\n", 1);
 }
 
+void SSL_write_cstr(SSL *ssl, const char *cstr)
+{
+    SSL_write(ssl, cstr, strlen(cstr));
+}
+
+void SSL_write_sv(SSL *ssl, String_View sv)
+{
+    SSL_write(ssl, sv.data, sv.count);
+}
+
+void privmsg(SSL *ssl, String_View channel, String_View message)
+{
+    SSL_write_cstr(ssl, "PRIVMSG ");
+    SSL_write_sv(ssl, channel);
+    SSL_write_cstr(ssl, " :");
+    SSL_write_sv(ssl, message);
+    SSL_write_cstr(ssl, "\n");
+}
+
 int main(int argc, char **argv)
 {
     const char *const program = shift(&argc, &argv);        // skip program
@@ -175,6 +194,7 @@ int main(int argc, char **argv)
     pass(ssl, password);
     nick(ssl, nickname);
     join(ssl, channel);
+    privmsg(ssl, channel, SV("what's up nerds :)"));
 
     char buffer[1024];
     ssize_t n = SSL_read(ssl, buffer, sizeof(buffer));
