@@ -1,4 +1,4 @@
-# KGBotka Returns
+# KGBotka 2: Eclectic Boogaloo
 
 ## Dependencies
 
