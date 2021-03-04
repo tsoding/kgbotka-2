@@ -14,10 +14,14 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 #include "./arena.h"
 
 #define HOST "irc.chat.twitch.tv"
-#define PORT "6667"
+// #define PORT "6667"
+#define PORT "6697"
 #define SECRET_CONF "secret.conf"
 
 char *shift(int *argc, char ***argv)
@@ -29,25 +33,25 @@ char *shift(int *argc, char ***argv)
     return result;
 }
 
-void join(int sd, String_View channel)
+void join(SSL *ssl, String_View channel)
 {
-    write(sd, "JOIN ", 5);
-    write(sd, channel.data, channel.count);
-    write(sd, "\n", 1);
+    SSL_write(ssl, "JOIN ", 5);
+    SSL_write(ssl, channel.data, channel.count);
+    SSL_write(ssl, "\n", 1);
 }
 
-void pass(int sd, String_View password)
+void pass(SSL *ssl, String_View password)
 {
-    write(sd, "PASS ", 5);
-    write(sd, password.data, password.count);
-    write(sd, "\n", 1);
+    SSL_write(ssl, "PASS ", 5);
+    SSL_write(ssl, password.data, password.count);
+    SSL_write(ssl, "\n", 1);
 }
 
-void nick(int sd, String_View nickname)
+void nick(SSL *ssl, String_View nickname)
 {
-    write(sd, "NICK ", 5);
-    write(sd, nickname.data, nickname.count);
-    write(sd, "\n", 1);
+    SSL_write(ssl, "NICK ", 5);
+    SSL_write(ssl, nickname.data, nickname.count);
+    SSL_write(ssl, "\n", 1);
 }
 
 int main(int argc, char **argv)
@@ -145,15 +149,38 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    pass(sd, password);
-    nick(sd, nickname);
-    join(sd, channel);
+    //////////////////////////////
+
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
+
+    if (ctx == NULL) {
+        fprintf(stderr, "ERROR: could not initialize the SSL context: %s\n",
+                strerror(errno));
+        exit(1);
+    }
+
+    SSL *ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, sd);
+
+    if (SSL_connect(ssl) < 0) {
+        fprintf(stderr, "ERROR: could not connect via SSL: %s\n",
+                strerror(errno));
+        exit(1);
+    }
+
+    //////////////////////////////
+
+    pass(ssl, password);
+    nick(ssl, nickname);
+    join(ssl, channel);
 
     char buffer[1024];
-    ssize_t n = read(sd, buffer, sizeof(buffer));
+    ssize_t n = SSL_read(ssl, buffer, sizeof(buffer));
     while (n > 0) {
         fwrite(buffer, 1, n, stdout);
-        n = read(sd, buffer, sizeof(buffer));
+        n = SSL_read(ssl, buffer, sizeof(buffer));
     }
 
     return 0;
