@@ -169,3 +169,25 @@ String_View sv_chop_left_while(String_View *sv, bool (*predicate)(char x))
     }
     return sv_chop_left(sv, i);
 }
+
+bool sv_try_chop_by_delim(String_View *sv, char delim, String_View *result)
+{
+    size_t i = 0;
+    while (i < sv->count && sv->data[i] != delim) {
+        i += 1;
+    }
+
+    if (i < sv->count) {
+        *result = (String_View) {
+            .count = i,
+            .data = sv->data,
+        };
+
+        sv->count -= i + 1;
+        sv->data  += i + 1;
+
+        return true;
+    }
+
+    return false;
+}

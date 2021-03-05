@@ -30,6 +30,7 @@ String_View sv_trim_left(String_View sv);
 String_View sv_trim_right(String_View sv);
 String_View sv_trim(String_View sv);
 String_View sv_chop_by_delim(String_View *sv, char delim);
+bool sv_try_chop_by_delim(String_View *sv, char delim, String_View *result);
 String_View sv_chop_left(String_View *sv, size_t n);
 String_View sv_chop_right(String_View *sv, size_t n);
 String_View sv_chop_left_while(String_View *sv, bool (*predicate)(char x));

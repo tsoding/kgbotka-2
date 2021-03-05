@@ -6,6 +6,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <ctype.h>
 
 #include <netdb.h>
 #include <sys/types.h>
@@ -18,6 +19,7 @@
 #include <openssl/err.h>
 
 #include "./arena.h"
+#include "./buffer.h"
 
 #define HOST "irc.chat.twitch.tv"
 // #define PORT "6667"
@@ -71,6 +73,45 @@ void privmsg(SSL *ssl, String_View channel, String_View message)
     SSL_write_cstr(ssl, " :");
     SSL_write_sv(ssl, message);
     SSL_write_cstr(ssl, "\n");
+}
+
+void pong(SSL *ssl, String_View response)
+{
+    SSL_write_cstr(ssl, "PONG :");
+    SSL_write_sv(ssl, response);
+}
+
+String_View sv_from_buffer(Buffer buffer)
+{
+    return (String_View) {
+        .count = buffer.size,
+        .data = buffer.data
+    };
+}
+
+bool params_next(String_View *params, String_View *output)
+{
+    assert(params);
+
+    if (params->count > 0) {
+        String_View param = {0};
+
+        if (*params->data == ':') {
+            sv_chop_left(params, 1);
+            size_t n = params->count;
+            param = sv_chop_left(params, n);
+        } else {
+            param = sv_chop_by_delim(params, ' ');
+        }
+
+        if (output) {
+            *output = param;
+        }
+
+        return true;
+    }
+
+    return false;
 }
 
 int main(int argc, char **argv)
@@ -194,14 +235,47 @@ int main(int argc, char **argv)
     pass(ssl, password);
     nick(ssl, nickname);
     join(ssl, channel);
-    privmsg(ssl, channel, SV("what's up nerds :)"));
 
-    char buffer[1024];
-    ssize_t n = SSL_read(ssl, buffer, sizeof(buffer));
-    while (n > 0) {
-        fwrite(buffer, 1, n, stdout);
-        n = SSL_read(ssl, buffer, sizeof(buffer));
+    // TODO: autoreconnect
+    Buffer buffer = {0};
+    char chunk[512];
+    ssize_t chunk_size = SSL_read(ssl, chunk, sizeof(chunk));
+    while (chunk_size > 0) {
+        buffer_write(&buffer, chunk, chunk_size);
+
+        // TODO: we need to handle situations when the buffer starts to grow indefinitely due to the server not sending any \r\n
+        {
+            String_View buffer_view = sv_from_buffer(buffer);
+            String_View line = {0};
+            while (sv_try_chop_by_delim(&buffer_view, '\n', &line)) {
+                line = sv_trim(line);
+                if (sv_starts_with(line, SV(":"))) {
+                    String_View prefix = sv_chop_by_delim(&line, ' ');
+                    printf("Prefix: "SV_Fmt"\n", SV_Arg(prefix));
+                }
+
+                String_View command = sv_chop_by_delim(&line, ' ');
+                printf("Command: "SV_Fmt"\n", SV_Arg(command));
+
+                Params params = params_from_line(line);
+
+                if (sv_eq(command, SV("PING"))) {
+                    String_View param = {0};
+                    if (params_next(&params, &param)) {
+                        pong(ssl, param);
+                    } else {
+                        pong(ssl, SV("tmi.twitch.tv"));
+                    }
+                }
+            }
+            memmove(buffer.data, buffer_view.data, buffer_view.count);
+            buffer.size = buffer_view.count;
+        }
+
+        chunk_size = SSL_read(ssl, chunk, sizeof(chunk));
     }
+
+    // TODO: finalize the connection
 
     return 0;
 }
