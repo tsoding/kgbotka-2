@@ -15,11 +15,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-
 #include "./arena.h"
 #include "./buffer.h"
+#include "./tls_imp.h"
 
 #define HOST "irc.chat.twitch.tv"
 // #define PORT "6667"
@@ -35,50 +33,50 @@ char *shift(int *argc, char ***argv)
     return result;
 }
 
-void join(SSL *ssl, String_View channel)
+void join(struct tls_imp_client *client, String_View channel)
 {
-    SSL_write(ssl, "JOIN ", 5);
-    SSL_write(ssl, channel.data, channel.count);
-    SSL_write(ssl, "\n", 1);
+    tls_imp_write(client, "JOIN ", 5);
+    tls_imp_write(client, channel.data, channel.count);
+    tls_imp_write(client, "\n", 1);
 }
 
-void pass(SSL *ssl, String_View password)
+void pass(struct tls_imp_client *client, String_View password)
 {
-    SSL_write(ssl, "PASS ", 5);
-    SSL_write(ssl, password.data, password.count);
-    SSL_write(ssl, "\n", 1);
+    tls_imp_write(client, "PASS ", 5);
+    tls_imp_write(client, password.data, password.count);
+    tls_imp_write(client, "\n", 1);
 }
 
-void nick(SSL *ssl, String_View nickname)
+void nick(struct tls_imp_client *client, String_View nickname)
 {
-    SSL_write(ssl, "NICK ", 5);
-    SSL_write(ssl, nickname.data, nickname.count);
-    SSL_write(ssl, "\n", 1);
+    tls_imp_write(client, "NICK ", 5);
+    tls_imp_write(client, nickname.data, nickname.count);
+    tls_imp_write(client, "\n", 1);
 }
 
-void SSL_write_cstr(SSL *ssl, const char *cstr)
+void tls_imp_write_cstr(struct tls_imp_client *client, const char *cstr)
 {
-    SSL_write(ssl, cstr, strlen(cstr));
+    tls_imp_write(client, cstr, strlen(cstr));
 }
 
-void SSL_write_sv(SSL *ssl, String_View sv)
+void tls_imp_write_sv(struct tls_imp_client *client, String_View sv)
 {
-    SSL_write(ssl, sv.data, sv.count);
+    tls_imp_write(client, sv.data, sv.count);
 }
 
-void privmsg(SSL *ssl, String_View channel, String_View message)
+void privmsg(struct tls_imp_client *client, String_View channel, String_View message)
 {
-    SSL_write_cstr(ssl, "PRIVMSG ");
-    SSL_write_sv(ssl, channel);
-    SSL_write_cstr(ssl, " :");
-    SSL_write_sv(ssl, message);
-    SSL_write_cstr(ssl, "\n");
+    tls_imp_write_cstr(client, "PRIVMSG ");
+    tls_imp_write_sv(client, channel);
+    tls_imp_write_cstr(client, " :");
+    tls_imp_write_sv(client, message);
+    tls_imp_write_cstr(client, "\n");
 }
 
-void pong(SSL *ssl, String_View response)
+void pong(struct tls_imp_client *client, String_View response)
 {
-    SSL_write_cstr(ssl, "PONG :");
-    SSL_write_sv(ssl, response);
+    tls_imp_write_cstr(client, "PONG :");
+    tls_imp_write_sv(client, response);
 }
 
 String_View sv_from_buffer(Buffer buffer)
@@ -211,20 +209,15 @@ int main(int argc, char **argv)
 
     //////////////////////////////
 
-    OpenSSL_add_all_algorithms();
-    SSL_load_error_strings();
-    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
-
-    if (ctx == NULL) {
+    struct tls_imp_global global;
+    if (!tls_imp_init(&global)) {
         fprintf(stderr, "ERROR: could not initialize the SSL context: %s\n",
                 strerror(errno));
         exit(1);
     }
 
-    SSL *ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, sd);
-
-    if (SSL_connect(ssl) < 0) {
+    struct tls_imp_client client;
+    if (!tls_imp_client_init(&global, &client, sd, HOST)) {
         fprintf(stderr, "ERROR: could not connect via SSL: %s\n",
                 strerror(errno));
         exit(1);
@@ -232,14 +225,14 @@ int main(int argc, char **argv)
 
     //////////////////////////////
 
-    pass(ssl, password);
-    nick(ssl, nickname);
-    join(ssl, channel);
+    pass(&client, password);
+    nick(&client, nickname);
+    join(&client, channel);
 
     // TODO: autoreconnect
     Buffer buffer = {0};
     char chunk[512];
-    ssize_t chunk_size = SSL_read(ssl, chunk, sizeof(chunk));
+    ssize_t chunk_size = tls_imp_read(&client, chunk, sizeof(chunk));
     while (chunk_size > 0) {
         buffer_write(&buffer, chunk, chunk_size);
 
@@ -248,34 +241,37 @@ int main(int argc, char **argv)
             String_View buffer_view = sv_from_buffer(buffer);
             String_View line = {0};
             while (sv_try_chop_by_delim(&buffer_view, '\n', &line)) {
-                line = sv_trim(line);
-                if (sv_starts_with(line, SV(":"))) {
-                    String_View prefix = sv_chop_by_delim(&line, ' ');
-                    printf("Prefix: "SV_Fmt"\n", SV_Arg(prefix));
-                }
+                printf("Line: "SV_Fmt"\n", SV_Arg(line));
+                // line = sv_trim(line);
+                // if (sv_starts_with(line, SV(":"))) {
+                //     String_View prefix = sv_chop_by_delim(&line, ' ');
+                //     printf("Prefix: "SV_Fmt"\n", SV_Arg(prefix));
+                // }
 
-                String_View command = sv_chop_by_delim(&line, ' ');
-                printf("Command: "SV_Fmt"\n", SV_Arg(command));
+                // String_View command = sv_chop_by_delim(&line, ' ');
+                // printf("Command: "SV_Fmt"\n", SV_Arg(command));
 
-                Params params = params_from_line(line);
+                // Params params = params_from_line(line);
 
-                if (sv_eq(command, SV("PING"))) {
-                    String_View param = {0};
-                    if (params_next(&params, &param)) {
-                        pong(ssl, param);
-                    } else {
-                        pong(ssl, SV("tmi.twitch.tv"));
-                    }
-                }
+                // if (sv_eq(command, SV("PING"))) {
+                //     String_View param = {0};
+                //     if (params_next(&params, &param)) {
+                //         pong(ssl, param);
+                //     } else {
+                //         pong(ssl, SV("tmi.twitch.tv"));
+                //     }
+                // }
             }
             memmove(buffer.data, buffer_view.data, buffer_view.count);
             buffer.size = buffer_view.count;
         }
 
-        chunk_size = SSL_read(ssl, chunk, sizeof(chunk));
+        chunk_size = tls_imp_read(&client, chunk, sizeof(chunk));
     }
 
-    // TODO: finalize the connection
+    tls_imp_client_close(&client);
+    close(sd);
+    tls_imp_free(&global);
 
     return 0;
 }
