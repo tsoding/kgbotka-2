@@ -24,8 +24,7 @@
 #define PORT "6697"
 #define SECRET_CONF "secret.conf"
 
-char *shift(int *argc, char ***argv)
-{
+char *shift(int *argc, char ***argv) {
     assert(*argc > 0);
     char *result = **argv;
     *argv += 1;
@@ -33,39 +32,34 @@ char *shift(int *argc, char ***argv)
     return result;
 }
 
-void join(struct tls_imp_client *client, String_View channel)
-{
+void join(struct tls_imp_client *client, String_View channel) {
     tls_imp_write(client, "JOIN ", 5);
     tls_imp_write(client, channel.data, channel.count);
     tls_imp_write(client, "\n", 1);
 }
 
-void pass(struct tls_imp_client *client, String_View password)
-{
+void pass(struct tls_imp_client *client, String_View password) {
     tls_imp_write(client, "PASS ", 5);
     tls_imp_write(client, password.data, password.count);
     tls_imp_write(client, "\n", 1);
 }
 
-void nick(struct tls_imp_client *client, String_View nickname)
-{
+void nick(struct tls_imp_client *client, String_View nickname) {
     tls_imp_write(client, "NICK ", 5);
     tls_imp_write(client, nickname.data, nickname.count);
     tls_imp_write(client, "\n", 1);
 }
 
-void tls_imp_write_cstr(struct tls_imp_client *client, const char *cstr)
-{
+void tls_imp_write_cstr(struct tls_imp_client *client, const char *cstr) {
     tls_imp_write(client, cstr, strlen(cstr));
 }
 
-void tls_imp_write_sv(struct tls_imp_client *client, String_View sv)
-{
+void tls_imp_write_sv(struct tls_imp_client *client, String_View sv) {
     tls_imp_write(client, sv.data, sv.count);
 }
 
-void privmsg(struct tls_imp_client *client, String_View channel, String_View message)
-{
+void privmsg(struct tls_imp_client *client, String_View channel,
+             String_View message) {
     tls_imp_write_cstr(client, "PRIVMSG ");
     tls_imp_write_sv(client, channel);
     tls_imp_write_cstr(client, " :");
@@ -73,22 +67,16 @@ void privmsg(struct tls_imp_client *client, String_View channel, String_View mes
     tls_imp_write_cstr(client, "\n");
 }
 
-void pong(struct tls_imp_client *client, String_View response)
-{
+void pong(struct tls_imp_client *client, String_View response) {
     tls_imp_write_cstr(client, "PONG :");
     tls_imp_write_sv(client, response);
 }
 
-String_View sv_from_buffer(Buffer buffer)
-{
-    return (String_View) {
-        .count = buffer.size,
-        .data = buffer.data
-    };
+String_View sv_from_buffer(Buffer buffer) {
+    return (String_View){.count = buffer.size, .data = buffer.data};
 }
 
-bool params_next(String_View *params, String_View *output)
-{
+bool params_next(String_View *params, String_View *output) {
     assert(params);
 
     if (params->count > 0) {
@@ -112,9 +100,8 @@ bool params_next(String_View *params, String_View *output)
     return false;
 }
 
-int main(int argc, char **argv)
-{
-    const char *const program = shift(&argc, &argv);        // skip program
+int main(int argc, char **argv) {
+    const char *const program = shift(&argc, &argv);  // skip program
 
     if (argc == 0) {
         fprintf(stderr, "Usage: %s <secret.conf>\n", program);
@@ -127,14 +114,14 @@ int main(int argc, char **argv)
     Arena arena = {0};
     String_View content = {0};
     if (arena_slurp_file(&arena, secret_conf, &content) < 0) {
-        fprintf(stderr, "ERROR: could not read "SV_Fmt": %s\n",
+        fprintf(stderr, "ERROR: could not read " SV_Fmt ": %s\n",
                 SV_Arg(secret_conf), strerror(errno));
         exit(1);
     }
 
     String_View nickname = SV_NULL;
     String_View password = SV_NULL;
-    String_View channel  = SV_NULL;
+    String_View channel = SV_NULL;
 
     while (content.count > 0) {
         String_View line = sv_trim(sv_chop_by_delim(&content, '\n'));
@@ -148,7 +135,8 @@ int main(int argc, char **argv)
             } else if (sv_eq(key, SV("channel"))) {
                 channel = value;
             } else {
-                fprintf(stderr, "ERROR: unknown key `"SV_Fmt"`\n", SV_Arg(key));
+                fprintf(stderr, "ERROR: unknown key `" SV_Fmt "`\n",
+                        SV_Arg(key));
                 exit(1);
             }
         }
@@ -176,7 +164,7 @@ int main(int argc, char **argv)
 
     struct addrinfo *addrs;
     if (getaddrinfo(HOST, PORT, &hints, &addrs) < 0) {
-        fprintf(stderr, "Could not get address of `"HOST"`: %s\n",
+        fprintf(stderr, "Could not get address of `" HOST "`: %s\n",
                 strerror(errno));
         exit(1);
     }
@@ -202,7 +190,7 @@ int main(int argc, char **argv)
     freeaddrinfo(addrs);
 
     if (sd == -1) {
-        fprintf(stderr, "Could not connect to "HOST":"PORT": %s\n",
+        fprintf(stderr, "Could not connect to " HOST ":" PORT ": %s\n",
                 strerror(errno));
         exit(1);
     }
@@ -236,31 +224,32 @@ int main(int argc, char **argv)
     while (chunk_size > 0) {
         buffer_write(&buffer, chunk, chunk_size);
 
-        // TODO: we need to handle situations when the buffer starts to grow indefinitely due to the server not sending any \r\n
+        // TODO: we need to handle situations when the buffer starts to grow
+        // indefinitely due to the server not sending any \r\n
         {
             String_View buffer_view = sv_from_buffer(buffer);
             String_View line = {0};
             while (sv_try_chop_by_delim(&buffer_view, '\n', &line)) {
-                printf("Line: "SV_Fmt"\n", SV_Arg(line));
-                // line = sv_trim(line);
-                // if (sv_starts_with(line, SV(":"))) {
-                //     String_View prefix = sv_chop_by_delim(&line, ' ');
-                //     printf("Prefix: "SV_Fmt"\n", SV_Arg(prefix));
-                // }
+                line = sv_trim(line);
+                if (sv_starts_with(line, SV(":"))) {
+                    String_View prefix = sv_chop_by_delim(&line, ' ');
+                    printf("Prefix: " SV_Fmt "\n", SV_Arg(prefix));
+                }
 
-                // String_View command = sv_chop_by_delim(&line, ' ');
-                // printf("Command: "SV_Fmt"\n", SV_Arg(command));
+                String_View command = sv_chop_by_delim(&line, ' ');
+                printf("Command: " SV_Fmt "\n", SV_Arg(command));
 
-                // Params params = params_from_line(line);
+                // TODO: Params & params_from_line is not defined
+                Params params = params_from_line(line);
 
-                // if (sv_eq(command, SV("PING"))) {
-                //     String_View param = {0};
-                //     if (params_next(&params, &param)) {
-                //         pong(ssl, param);
-                //     } else {
-                //         pong(ssl, SV("tmi.twitch.tv"));
-                //     }
-                // }
+                if (sv_eq(command, SV("PING"))) {
+                    String_View param = {0};
+                    if (params_next(&params, &param)) {
+                        pong(&client, param);
+                    } else {
+                        pong(&client, SV("tmi.twitch.tv"));
+                    }
+                }
             }
             memmove(buffer.data, buffer_view.data, buffer_view.count);
             buffer.size = buffer_view.count;
