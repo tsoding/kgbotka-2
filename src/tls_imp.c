@@ -14,7 +14,8 @@ int tls_imp_init(struct tls_imp_global* global) {
 }
 
 int tls_imp_client_init(struct tls_imp_global* global,
-                        struct tls_imp_client* client, int fd) {
+                        struct tls_imp_client* client, int fd,
+                        const char* domainName) {
     client->ssl = SSL_new(global->ctx);
     SSL_set_fd(client->ssl, fd);
 
@@ -29,7 +30,7 @@ ssize_t tls_imp_read(struct tls_imp_client* client, char* data, size_t size) {
 }
 
 ssize_t tls_imp_write(struct tls_imp_client* client, const char* data,
-                     size_t size) {
+                      size_t size) {
     return SSL_write(client->ssl, data, size);
 }
 
@@ -66,7 +67,7 @@ ssize_t tls_imp_read(struct tls_imp_client* client, char* data, size_t size) {
 }
 
 ssize_t tls_imp_write(struct tls_imp_client* client, const char* data,
-                     size_t size) {
+                      size_t size) {
     return tls_write(client->tls, data, size);
 }
 
