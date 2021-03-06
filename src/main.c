@@ -24,7 +24,8 @@
 #define PORT "6697"
 #define SECRET_CONF "secret.conf"
 
-char *shift(int *argc, char ***argv) {
+char *shift(int *argc, char ***argv)
+{
     assert(*argc > 0);
     char *result = **argv;
     *argv += 1;
@@ -32,34 +33,40 @@ char *shift(int *argc, char ***argv) {
     return result;
 }
 
-void join(struct tls_imp_client *client, String_View channel) {
+void join(struct tls_imp_client *client, String_View channel)
+{
     tls_imp_write(client, "JOIN ", 5);
     tls_imp_write(client, channel.data, channel.count);
     tls_imp_write(client, "\n", 1);
 }
 
-void pass(struct tls_imp_client *client, String_View password) {
+void pass(struct tls_imp_client *client, String_View password)
+{
     tls_imp_write(client, "PASS ", 5);
     tls_imp_write(client, password.data, password.count);
     tls_imp_write(client, "\n", 1);
 }
 
-void nick(struct tls_imp_client *client, String_View nickname) {
+void nick(struct tls_imp_client *client, String_View nickname)
+{
     tls_imp_write(client, "NICK ", 5);
     tls_imp_write(client, nickname.data, nickname.count);
     tls_imp_write(client, "\n", 1);
 }
 
-void tls_imp_write_cstr(struct tls_imp_client *client, const char *cstr) {
+void tls_imp_write_cstr(struct tls_imp_client *client, const char *cstr)
+{
     tls_imp_write(client, cstr, strlen(cstr));
 }
 
-void tls_imp_write_sv(struct tls_imp_client *client, String_View sv) {
+void tls_imp_write_sv(struct tls_imp_client *client, String_View sv)
+{
     tls_imp_write(client, sv.data, sv.count);
 }
 
 void privmsg(struct tls_imp_client *client, String_View channel,
-             String_View message) {
+             String_View message)
+{
     tls_imp_write_cstr(client, "PRIVMSG ");
     tls_imp_write_sv(client, channel);
     tls_imp_write_cstr(client, " :");
@@ -67,16 +74,19 @@ void privmsg(struct tls_imp_client *client, String_View channel,
     tls_imp_write_cstr(client, "\n");
 }
 
-void pong(struct tls_imp_client *client, String_View response) {
+void pong(struct tls_imp_client *client, String_View response)
+{
     tls_imp_write_cstr(client, "PONG :");
     tls_imp_write_sv(client, response);
 }
 
-String_View sv_from_buffer(Buffer buffer) {
+String_View sv_from_buffer(Buffer buffer)
+{
     return (String_View){.count = buffer.size, .data = buffer.data};
 }
 
-bool params_next(String_View *params, String_View *output) {
+bool params_next(String_View *params, String_View *output)
+{
     assert(params);
 
     if (params->count > 0) {
@@ -100,7 +110,8 @@ bool params_next(String_View *params, String_View *output) {
     return false;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     const char *const program = shift(&argc, &argv);  // skip program
 
     if (argc == 0) {
