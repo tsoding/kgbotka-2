@@ -82,7 +82,10 @@ void pong(struct tls_imp_client *client, String_View response)
 
 String_View sv_from_buffer(Buffer buffer)
 {
-    return (String_View){.count = buffer.size, .data = buffer.data};
+    return (String_View) {
+        .count = buffer.size,
+        .data = buffer.data
+    };
 }
 
 bool params_next(String_View *params, String_View *output)
@@ -112,7 +115,7 @@ bool params_next(String_View *params, String_View *output)
 
 int main(int argc, char **argv)
 {
-    const char *const program = shift(&argc, &argv);  // skip program
+    const char *const program = shift(&argc, &argv);        // skip program
 
     if (argc == 0) {
         fprintf(stderr, "Usage: %s <secret.conf>\n", program);
@@ -125,14 +128,14 @@ int main(int argc, char **argv)
     Arena arena = {0};
     String_View content = {0};
     if (arena_slurp_file(&arena, secret_conf, &content) < 0) {
-        fprintf(stderr, "ERROR: could not read " SV_Fmt ": %s\n",
+        fprintf(stderr, "ERROR: could not read "SV_Fmt": %s\n",
                 SV_Arg(secret_conf), strerror(errno));
         exit(1);
     }
 
     String_View nickname = SV_NULL;
     String_View password = SV_NULL;
-    String_View channel = SV_NULL;
+    String_View channel  = SV_NULL;
 
     while (content.count > 0) {
         String_View line = sv_trim(sv_chop_by_delim(&content, '\n'));
@@ -146,7 +149,7 @@ int main(int argc, char **argv)
             } else if (sv_eq(key, SV("channel"))) {
                 channel = value;
             } else {
-                fprintf(stderr, "ERROR: unknown key `" SV_Fmt "`\n",
+                fprintf(stderr, "ERROR: unknown key `"SV_Fmt"`\n",
                         SV_Arg(key));
                 exit(1);
             }
@@ -175,7 +178,7 @@ int main(int argc, char **argv)
 
     struct addrinfo *addrs;
     if (getaddrinfo(HOST, PORT, &hints, &addrs) < 0) {
-        fprintf(stderr, "Could not get address of `" HOST "`: %s\n",
+        fprintf(stderr, "Could not get address of `"HOST"`: %s\n",
                 strerror(errno));
         exit(1);
     }
@@ -201,7 +204,7 @@ int main(int argc, char **argv)
     freeaddrinfo(addrs);
 
     if (sd == -1) {
-        fprintf(stderr, "Could not connect to " HOST ":" PORT ": %s\n",
+        fprintf(stderr, "Could not connect to "HOST":"PORT": %s\n",
                 strerror(errno));
         exit(1);
     }
@@ -235,8 +238,7 @@ int main(int argc, char **argv)
     while (chunk_size > 0) {
         buffer_write(&buffer, chunk, chunk_size);
 
-        // TODO: we need to handle situations when the buffer starts to grow
-        // indefinitely due to the server not sending any \r\n
+        // TODO: we need to handle situations when the buffer starts to grow indefinitely due to the server not sending any \r\n
         {
             String_View buffer_view = sv_from_buffer(buffer);
             String_View line = {0};
@@ -244,11 +246,11 @@ int main(int argc, char **argv)
                 line = sv_trim(line);
                 if (sv_starts_with(line, SV(":"))) {
                     String_View prefix = sv_chop_by_delim(&line, ' ');
-                    printf("Prefix: " SV_Fmt "\n", SV_Arg(prefix));
+                    printf("Prefix: "SV_Fmt"\n", SV_Arg(prefix));
                 }
 
                 String_View command = sv_chop_by_delim(&line, ' ');
-                printf("Command: " SV_Fmt "\n", SV_Arg(command));
+                printf("Command: "SV_Fmt"\n", SV_Arg(command));
 
                 // TODO: Params & params_from_line is not defined
                 Params params = params_from_line(line);

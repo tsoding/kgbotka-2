@@ -36,6 +36,6 @@ int tls_imp_client_init(struct tls_imp_global* global,
                         const char* domainName);
 ssize_t tls_imp_read(struct tls_imp_client* client, char* data, size_t size);
 ssize_t tls_imp_write(struct tls_imp_client* client, const char* data,
-                     size_t size);
+                      size_t size);
 int tls_imp_client_close(struct tls_imp_client* client);
 void tls_imp_free(struct tls_imp_global* global);
