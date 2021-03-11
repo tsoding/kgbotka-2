@@ -8,7 +8,7 @@ We depend on [OpenSSL](https://www.openssl.org/). Feel free to submit PRs to mak
 
 ```console
 $ ./build.sh
-$ ./kgbotka ./path/to/secret.conf
+$ ./kgbotka ./state/ ./path/to/secret.conf
 ```
 
 ## secret.conf
