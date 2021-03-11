@@ -3,6 +3,8 @@
 
 #include <stdlib.h>
 
+#include "./sv.h"
+
 typedef struct {
     size_t size;
     size_t capacity;
