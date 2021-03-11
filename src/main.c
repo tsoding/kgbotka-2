@@ -22,6 +22,7 @@
 #include "./buffer.h"
 #include "./command.h"
 #include "./log.h"
+#include "./secret.h"
 
 #define HOST "irc.chat.twitch.tv"
 // #define PORT "6667"
@@ -142,54 +143,9 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    const String_View secret_conf = sv_from_cstr(shift(&argc, &argv));
+    const String_View secret_conf_path = sv_from_cstr(shift(&argc, &argv));
 
-    String_View nickname = SV_NULL;
-    String_View password = SV_NULL;
-    String_View channel  = SV_NULL;
-
-    {
-        String_View content = {0};
-        if (arena_slurp_file(&secret_arena, secret_conf, &content) < 0) {
-            fprintf(stderr, "ERROR: could not read "SV_Fmt": %s\n",
-                    SV_Arg(secret_conf), strerror(errno));
-            exit(1);
-        }
-
-        while (content.count > 0) {
-            String_View line = sv_trim(sv_chop_by_delim(&content, '\n'));
-            if (line.count > 0) {
-                String_View key = sv_trim(sv_chop_by_delim(&line, '='));
-                String_View value = sv_trim(line);
-                if (sv_eq(key, SV("nickname"))) {
-                    nickname = value;
-                } else if (sv_eq(key, SV("password"))) {
-                    password = value;
-                } else if (sv_eq(key, SV("channel"))) {
-                    channel = value;
-                } else {
-                    fprintf(stderr, "ERROR: unknown key `"SV_Fmt"`\n", SV_Arg(key));
-                    exit(1);
-                }
-            }
-        }
-    }
-
-    if (nickname.data == NULL) {
-        fprintf(stderr, "ERROR: `nickname` was not provided\n");
-        exit(1);
-    }
-
-    if (password.data == NULL) {
-        fprintf(stderr, "ERROR: `password` was not provided\n");
-        exit(1);
-    }
-
-    if (channel.data == NULL) {
-        fprintf(stderr, "ERROR: `channel` was not provided\n");
-        exit(1);
-    }
-
+    Secret secret = secret_from_file(&secret_arena, secret_conf_path);
     Log log = log_to_handle(stdout);
 
     struct addrinfo hints = {0};
@@ -249,9 +205,9 @@ int main(int argc, char **argv)
 
     //////////////////////////////
 
-    pass(ssl, password);
-    nick(ssl, nickname);
-    join(ssl, channel);
+    pass(ssl, secret.password);
+    nick(ssl, secret.nickname);
+    join(ssl, secret.channel);
 
     // TODO: hot reloading of the commands is not implemented
     Commands commands = {0};
