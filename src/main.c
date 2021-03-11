@@ -20,6 +20,8 @@
 
 #include "./arena.h"
 #include "./buffer.h"
+#include "./command.h"
+#include "./log.h"
 
 #define HOST "irc.chat.twitch.tv"
 // #define PORT "6667"
@@ -114,44 +116,61 @@ bool params_next(String_View *params, String_View *output)
     return false;
 }
 
+void usage(const char *program, FILE *stream)
+{
+    fprintf(stream, "Usage: %s <state/> <secret.conf>\n", program);
+}
+
+Arena secret_arena = {0};
+Arena commands_arena = {0};
+
 int main(int argc, char **argv)
 {
     const char *const program = shift(&argc, &argv);        // skip program
 
     if (argc == 0) {
-        fprintf(stderr, "Usage: %s <secret.conf>\n", program);
-        fprintf(stderr, "ERROR: path to secret.conf expected\n");
+        usage(program, stderr);
+        fprintf(stderr, "ERROR: path to state/ folder expected\n");
+        exit(1);
+    }
+
+    const String_View state_path = sv_from_cstr(shift(&argc, &argv));
+
+    if (argc == 0) {
+        usage(program, stderr);
+        fprintf(stderr, "ERROR: path to secret.conf file expected\n");
         exit(1);
     }
 
     const String_View secret_conf = sv_from_cstr(shift(&argc, &argv));
 
-    Arena arena = {0};
-    String_View content = {0};
-    if (arena_slurp_file(&arena, secret_conf, &content) < 0) {
-        fprintf(stderr, "ERROR: could not read "SV_Fmt": %s\n",
-                SV_Arg(secret_conf), strerror(errno));
-        exit(1);
-    }
-
     String_View nickname = SV_NULL;
     String_View password = SV_NULL;
     String_View channel  = SV_NULL;
 
-    while (content.count > 0) {
-        String_View line = sv_trim(sv_chop_by_delim(&content, '\n'));
-        if (line.count > 0) {
-            String_View key = sv_trim(sv_chop_by_delim(&line, '='));
-            String_View value = sv_trim(line);
-            if (sv_eq(key, SV("nickname"))) {
-                nickname = value;
-            } else if (sv_eq(key, SV("password"))) {
-                password = value;
-            } else if (sv_eq(key, SV("channel"))) {
-                channel = value;
-            } else {
-                fprintf(stderr, "ERROR: unknown key `"SV_Fmt"`\n", SV_Arg(key));
-                exit(1);
+    {
+        String_View content = {0};
+        if (arena_slurp_file(&secret_arena, secret_conf, &content) < 0) {
+            fprintf(stderr, "ERROR: could not read "SV_Fmt": %s\n",
+                    SV_Arg(secret_conf), strerror(errno));
+            exit(1);
+        }
+
+        while (content.count > 0) {
+            String_View line = sv_trim(sv_chop_by_delim(&content, '\n'));
+            if (line.count > 0) {
+                String_View key = sv_trim(sv_chop_by_delim(&line, '='));
+                String_View value = sv_trim(line);
+                if (sv_eq(key, SV("nickname"))) {
+                    nickname = value;
+                } else if (sv_eq(key, SV("password"))) {
+                    password = value;
+                } else if (sv_eq(key, SV("channel"))) {
+                    channel = value;
+                } else {
+                    fprintf(stderr, "ERROR: unknown key `"SV_Fmt"`\n", SV_Arg(key));
+                    exit(1);
+                }
             }
         }
     }
@@ -171,6 +190,8 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    Log log = log_to_handle(stdout);
+
     struct addrinfo hints = {0};
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -178,9 +199,8 @@ int main(int argc, char **argv)
 
     struct addrinfo *addrs;
     if (getaddrinfo(HOST, PORT, &hints, &addrs) < 0) {
-        fprintf(stderr, "Could not get address of `"HOST"`: %s\n",
-                strerror(errno));
-        exit(1);
+        log_unlucky(&log, "Could not get address of `"HOST"`: %s",
+                    strerror(errno));
     }
 
     int sd = 0;
@@ -204,9 +224,8 @@ int main(int argc, char **argv)
     freeaddrinfo(addrs);
 
     if (sd == -1) {
-        fprintf(stderr, "Could not connect to "HOST":"PORT": %s\n",
-                strerror(errno));
-        exit(1);
+        log_unlucky(&log, "Could not connect to "HOST":"PORT": %s",
+                    strerror(errno));
     }
 
     //////////////////////////////
@@ -216,18 +235,16 @@ int main(int argc, char **argv)
     SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
 
     if (ctx == NULL) {
-        fprintf(stderr, "ERROR: could not initialize the SSL context: %s\n",
-                strerror(errno));
-        exit(1);
+        log_unlucky(&log, "Could not initialize the SSL context: %s",
+                    strerror(errno));
     }
 
     SSL *ssl = SSL_new(ctx);
     SSL_set_fd(ssl, sd);
 
     if (SSL_connect(ssl) < 0) {
-        fprintf(stderr, "ERROR: could not connect via SSL: %s\n",
-                strerror(errno));
-        exit(1);
+        log_unlucky(&log, "Could not connect via SSL: %s",
+                    strerror(errno));
     }
 
     //////////////////////////////
@@ -235,6 +252,22 @@ int main(int argc, char **argv)
     pass(ssl, password);
     nick(ssl, nickname);
     join(ssl, channel);
+
+    // TODO: hot reloading of the commands is not implemented
+    Commands commands = {0};
+    arena_clean(&commands_arena);
+    String_View commands_file_path = SV_CONCAT(&commands_arena, state_path, SV("/commands.txt"));
+    if (!load_commands_file(&commands_arena, &log, commands_file_path, &commands)) {
+        arena_clean(&commands_arena);
+        memset(&commands, 0, sizeof(commands));
+    } else {
+        log_info(&log, "Loaded %zu commands", commands.count);
+        for (size_t i = 0; i < commands.count; ++i) {
+            log_info(&log, "    "SV_Fmt, SV_Arg(commands.command_defs[i].name));
+        }
+    }
+
+    // TODO: no support for Twitch IRC tags
 
     // TODO: autoreconnect
     Buffer buffer = {0};
@@ -249,13 +282,14 @@ int main(int argc, char **argv)
             String_View line = {0};
             while (sv_try_chop_by_delim(&buffer_view, '\n', &line)) {
                 line = sv_trim(line);
+                log_info(&log, SV_Fmt, SV_Arg(line));
+
                 if (sv_starts_with(line, SV(":"))) {
                     String_View prefix = sv_chop_by_delim(&line, ' ');
-                    printf("Prefix: "SV_Fmt"\n", SV_Arg(prefix));
+                    (void) prefix;
                 }
 
                 String_View command = sv_chop_by_delim(&line, ' ');
-                printf("Command: "SV_Fmt"\n", SV_Arg(command));
 
                 String_View params = line;
 
@@ -265,6 +299,22 @@ int main(int argc, char **argv)
                         pong(ssl, param);
                     } else {
                         pong(ssl, SV("tmi.twitch.tv"));
+                    }
+                } else if (sv_eq(command, SV("PRIVMSG"))) {
+                    String_View channel = {0};
+                    params_next(&params, &channel);
+
+                    String_View message = {0};
+                    params_next(&params, &message);
+
+                    Command_Call command_call = {0};
+                    if (command_call_parse(SV("%"), message, &command_call)) {
+                        Command_Def def = {0};
+                        if (commands_find_def(&commands, command_call.name, &def)) {
+                            privmsg(ssl, channel, def.response);
+                        } else {
+                            log_warn(&log, "Could not find command `"SV_Fmt"`", SV_Arg(command_call.name));
+                        }
                     }
                 }
             }

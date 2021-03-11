@@ -7,6 +7,7 @@
 Region *region_create(size_t capacity)
 {
     const size_t region_size = sizeof(Region) + capacity;
+    // TODO: failed malloc is never checked in Arena implementation
     Region *region = malloc(region_size);
     memset(region, 0, region_size);
     region->capacity = capacity;
