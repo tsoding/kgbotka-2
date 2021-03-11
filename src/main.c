@@ -281,7 +281,12 @@ int main(int argc, char **argv)
         chunk_size = SSL_read(ssl, chunk, sizeof(chunk));
     }
 
-    // TODO: finalize the connection
+    SSL_set_shutdown(ssl, SSL_RECEIVED_SHUTDOWN | SSL_SENT_SHUTDOWN);
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    SSL_CTX_free(ctx);
+
+    close(sd);
 
     return 0;
 }
