@@ -25,3 +25,10 @@ void buffer_free(Buffer *buffer)
     buffer->capacity = 0;
 }
 
+String_View sv_from_buffer(Buffer buffer)
+{
+    return (String_View) {
+        .count = buffer.size,
+        .data = buffer.data
+    };
+}

@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200112L
-
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,21 +6,12 @@
 #include <stdbool.h>
 #include <ctype.h>
 
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-
 #include "./arena.h"
 #include "./buffer.h"
 #include "./command.h"
 #include "./log.h"
 #include "./secret.h"
+#include "./irc.h"
 
 #define HOST "irc.chat.twitch.tv"
 // #define PORT "6667"
@@ -36,85 +25,6 @@ char *shift(int *argc, char ***argv)
     *argv += 1;
     *argc -= 1;
     return result;
-}
-
-void join(SSL *ssl, String_View channel)
-{
-    SSL_write(ssl, "JOIN ", 5);
-    SSL_write(ssl, channel.data, channel.count);
-    SSL_write(ssl, "\n", 1);
-}
-
-void pass(SSL *ssl, String_View password)
-{
-    SSL_write(ssl, "PASS ", 5);
-    SSL_write(ssl, password.data, password.count);
-    SSL_write(ssl, "\n", 1);
-}
-
-void nick(SSL *ssl, String_View nickname)
-{
-    SSL_write(ssl, "NICK ", 5);
-    SSL_write(ssl, nickname.data, nickname.count);
-    SSL_write(ssl, "\n", 1);
-}
-
-void SSL_write_cstr(SSL *ssl, const char *cstr)
-{
-    SSL_write(ssl, cstr, strlen(cstr));
-}
-
-void SSL_write_sv(SSL *ssl, String_View sv)
-{
-    SSL_write(ssl, sv.data, sv.count);
-}
-
-void privmsg(SSL *ssl, String_View channel, String_View message)
-{
-    SSL_write_cstr(ssl, "PRIVMSG ");
-    SSL_write_sv(ssl, channel);
-    SSL_write_cstr(ssl, " :");
-    SSL_write_sv(ssl, message);
-    SSL_write_cstr(ssl, "\n");
-}
-
-void pong(SSL *ssl, String_View response)
-{
-    SSL_write_cstr(ssl, "PONG :");
-    SSL_write_sv(ssl, response);
-}
-
-String_View sv_from_buffer(Buffer buffer)
-{
-    return (String_View) {
-        .count = buffer.size,
-        .data = buffer.data
-    };
-}
-
-bool params_next(String_View *params, String_View *output)
-{
-    assert(params);
-
-    if (params->count > 0) {
-        String_View param = {0};
-
-        if (*params->data == ':') {
-            sv_chop_left(params, 1);
-            size_t n = params->count;
-            param = sv_chop_left(params, n);
-        } else {
-            param = sv_chop_by_delim(params, ' ');
-        }
-
-        if (output) {
-            *output = param;
-        }
-
-        return true;
-    }
-
-    return false;
 }
 
 void usage(const char *program, FILE *stream)
@@ -148,66 +58,12 @@ int main(int argc, char **argv)
     Secret secret = secret_from_file(&secret_arena, secret_conf_path);
     Log log = log_to_handle(stdout);
 
-    struct addrinfo hints = {0};
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
+    Irc irc = irc_connect(HOST, PORT);
 
-    struct addrinfo *addrs;
-    if (getaddrinfo(HOST, PORT, &hints, &addrs) < 0) {
-        log_unlucky(&log, "Could not get address of `"HOST"`: %s",
-                    strerror(errno));
-    }
-
-    int sd = 0;
-    for (struct addrinfo *addr = addrs; addr != NULL; addr = addr->ai_next) {
-        // TODO: don't recreate socket on each attempt
-        // Just create a single socket with the appropriate family and type
-        // and keep using it.
-        sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-
-        if (sd == -1) {
-            break;
-        }
-
-        if (connect(sd, addr->ai_addr, addr->ai_addrlen) == 0) {
-            break;
-        }
-
-        close(sd);
-        sd = -1;
-    }
-    freeaddrinfo(addrs);
-
-    if (sd == -1) {
-        log_unlucky(&log, "Could not connect to "HOST":"PORT": %s",
-                    strerror(errno));
-    }
-
-    //////////////////////////////
-
-    OpenSSL_add_all_algorithms();
-    SSL_load_error_strings();
-    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
-
-    if (ctx == NULL) {
-        log_unlucky(&log, "Could not initialize the SSL context: %s",
-                    strerror(errno));
-    }
-
-    SSL *ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, sd);
-
-    if (SSL_connect(ssl) < 0) {
-        log_unlucky(&log, "Could not connect via SSL: %s",
-                    strerror(errno));
-    }
-
-    //////////////////////////////
-
-    pass(ssl, secret.password);
-    nick(ssl, secret.nickname);
-    join(ssl, secret.channel);
+    // TODO: no support for Twitch IRC tags
+    irc_pass(&irc, secret.password);
+    irc_nick(&irc, secret.nickname);
+    irc_join(&irc, secret.channel);
 
     // TODO: hot reloading of the commands is not implemented
     Commands commands = {0};
@@ -223,12 +79,10 @@ int main(int argc, char **argv)
         }
     }
 
-    // TODO: no support for Twitch IRC tags
-
     // TODO: autoreconnect
     Buffer buffer = {0};
     char chunk[512];
-    ssize_t chunk_size = SSL_read(ssl, chunk, sizeof(chunk));
+    ssize_t chunk_size = SSL_read(irc.ssl, chunk, sizeof(chunk));
     while (chunk_size > 0) {
         buffer_write(&buffer, chunk, chunk_size);
 
@@ -252,9 +106,9 @@ int main(int argc, char **argv)
                 if (sv_eq(command, SV("PING"))) {
                     String_View param = {0};
                     if (params_next(&params, &param)) {
-                        pong(ssl, param);
+                        irc_pong(&irc, param);
                     } else {
-                        pong(ssl, SV("tmi.twitch.tv"));
+                        irc_pong(&irc, SV("tmi.twitch.tv"));
                     }
                 } else if (sv_eq(command, SV("PRIVMSG"))) {
                     String_View channel = {0};
@@ -267,7 +121,7 @@ int main(int argc, char **argv)
                     if (command_call_parse(SV("%"), message, &command_call)) {
                         Command_Def def = {0};
                         if (commands_find_def(&commands, command_call.name, &def)) {
-                            privmsg(ssl, channel, def.response);
+                            irc_privmsg(&irc, channel, def.response);
                         } else {
                             log_warn(&log, "Could not find command `"SV_Fmt"`", SV_Arg(command_call.name));
                         }
@@ -278,10 +132,10 @@ int main(int argc, char **argv)
             buffer.size = buffer_view.count;
         }
 
-        chunk_size = SSL_read(ssl, chunk, sizeof(chunk));
+        chunk_size = SSL_read(irc.ssl, chunk, sizeof(chunk));
     }
 
-    // TODO: finalize the connection
+    irc_destroy(irc);
 
     return 0;
 }
