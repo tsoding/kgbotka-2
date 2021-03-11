@@ -257,7 +257,7 @@ int main(int argc, char **argv)
                 String_View command = sv_chop_by_delim(&line, ' ');
                 printf("Command: "SV_Fmt"\n", SV_Arg(command));
 
-                Params params = params_from_line(line);
+                String_View params = line;
 
                 if (sv_eq(command, SV("PING"))) {
                     String_View param = {0};
