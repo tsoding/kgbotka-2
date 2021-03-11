@@ -23,7 +23,7 @@ typedef struct {
 } Commands;
 
 bool load_commands_file(Arena *arena, Log *log, String_View file_path, Commands *
-commands);
+                        commands);
 
 bool commands_find_def(const Commands *commands, String_View name, Command_Def *def);
 
