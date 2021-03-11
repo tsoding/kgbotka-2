@@ -27,14 +27,6 @@ char *shift(int *argc, char ***argv)
     return result;
 }
 
-String_View sv_from_buffer(Buffer buffer)
-{
-    return (String_View) {
-        .count = buffer.size,
-        .data = buffer.data
-    };
-}
-
 void usage(const char *program, FILE *stream)
 {
     fprintf(stream, "Usage: %s <state/> <secret.conf>\n", program);
