@@ -1,0 +1,16 @@
+name: Check formatting
+on: [push, pull_request]
+
+jobs:
+  build-linux-gcc:
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v1
+      - name: install 3rd party dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install astyle
+      - name: validate formatting
+        run: |
+          find src/ -type f -exec astyle --style=kr {} \;
+          git diff --exit-code

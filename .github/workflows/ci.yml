@@ -1,0 +1,40 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  build-linux-gcc:
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v1
+      - name: build all
+        run: |
+          ./build.sh
+        env:
+          CC: gcc
+          CXX: g++
+  build-linux-clang:
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v1
+      - name: build all
+        run: |
+          ./build.sh
+        env:
+          CC: clang
+          CXX: clang++
+  build-macos:
+    runs-on: macOS-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: install 3rd party things, I dunno
+        run: |
+          brew install openssl
+      - name: build all
+        run: |
+          ./build.sh
+        env:
+          CC: clang
+          CXX: clang++
+          PKG_CONFIG_PATH: /usr/local/opt/openssl/lib/pkgconfig
+# TODO: no CI for windows
+# TODO: no CI for freebsd
