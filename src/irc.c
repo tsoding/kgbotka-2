@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200112L
 
+#include <assert.h>
 #include <string.h>
 
 #include <netdb.h>
@@ -10,6 +11,16 @@
 #include <unistd.h>
 
 #include "./irc.h"
+
+void SSL_write_cstr(SSL *ssl, const char *cstr)
+{
+    SSL_write(ssl, cstr, strlen(cstr));
+}
+
+void SSL_write_sv(SSL *ssl, String_View sv)
+{
+    SSL_write(ssl, sv.data, sv.count);
+}
 
 Irc irc_connect(const char *host, const char *service)
 {
@@ -85,4 +96,65 @@ void irc_destroy(Irc irc)
     SSL_CTX_free(irc.ctx);
 
     close(irc.sd);
+}
+
+void irc_join(Irc *irc, String_View channel)
+{
+    SSL_write(irc->ssl, "JOIN ", 5);
+    SSL_write(irc->ssl, channel.data, channel.count);
+    SSL_write(irc->ssl, "\n", 1);
+}
+
+void irc_pass(Irc *irc, String_View password)
+{
+    SSL_write(irc->ssl, "PASS ", 5);
+    SSL_write(irc->ssl, password.data, password.count);
+    SSL_write(irc->ssl, "\n", 1);
+}
+
+void irc_nick(Irc *irc, String_View nickname)
+{
+    SSL_write(irc->ssl, "NICK ", 5);
+    SSL_write(irc->ssl, nickname.data, nickname.count);
+    SSL_write(irc->ssl, "\n", 1);
+}
+
+void irc_privmsg(Irc *irc, String_View channel, String_View message)
+{
+    SSL_write_cstr(irc->ssl, "PRIVMSG ");
+    SSL_write_sv(irc->ssl, channel);
+    SSL_write_cstr(irc->ssl, " :");
+    SSL_write_sv(irc->ssl, message);
+    SSL_write_cstr(irc->ssl, "\n");
+}
+
+void irc_pong(Irc *irc, String_View response)
+{
+    SSL_write_cstr(irc->ssl, "PONG :");
+    SSL_write_sv(irc->ssl, response);
+}
+
+bool params_next(String_View *params, String_View *output)
+{
+    assert(params);
+
+    if (params->count > 0) {
+        String_View param = {0};
+
+        if (*params->data == ':') {
+            sv_chop_left(params, 1);
+            size_t n = params->count;
+            param = sv_chop_left(params, n);
+        } else {
+            param = sv_chop_by_delim(params, ' ');
+        }
+
+        if (output) {
+            *output = param;
+        }
+
+        return true;
+    }
+
+    return false;
 }

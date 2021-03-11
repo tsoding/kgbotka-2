@@ -27,83 +27,12 @@ char *shift(int *argc, char ***argv)
     return result;
 }
 
-void join(SSL *ssl, String_View channel)
-{
-    SSL_write(ssl, "JOIN ", 5);
-    SSL_write(ssl, channel.data, channel.count);
-    SSL_write(ssl, "\n", 1);
-}
-
-void pass(SSL *ssl, String_View password)
-{
-    SSL_write(ssl, "PASS ", 5);
-    SSL_write(ssl, password.data, password.count);
-    SSL_write(ssl, "\n", 1);
-}
-
-void nick(SSL *ssl, String_View nickname)
-{
-    SSL_write(ssl, "NICK ", 5);
-    SSL_write(ssl, nickname.data, nickname.count);
-    SSL_write(ssl, "\n", 1);
-}
-
-void SSL_write_cstr(SSL *ssl, const char *cstr)
-{
-    SSL_write(ssl, cstr, strlen(cstr));
-}
-
-void SSL_write_sv(SSL *ssl, String_View sv)
-{
-    SSL_write(ssl, sv.data, sv.count);
-}
-
-void privmsg(SSL *ssl, String_View channel, String_View message)
-{
-    SSL_write_cstr(ssl, "PRIVMSG ");
-    SSL_write_sv(ssl, channel);
-    SSL_write_cstr(ssl, " :");
-    SSL_write_sv(ssl, message);
-    SSL_write_cstr(ssl, "\n");
-}
-
-void pong(SSL *ssl, String_View response)
-{
-    SSL_write_cstr(ssl, "PONG :");
-    SSL_write_sv(ssl, response);
-}
-
 String_View sv_from_buffer(Buffer buffer)
 {
     return (String_View) {
         .count = buffer.size,
         .data = buffer.data
     };
-}
-
-bool params_next(String_View *params, String_View *output)
-{
-    assert(params);
-
-    if (params->count > 0) {
-        String_View param = {0};
-
-        if (*params->data == ':') {
-            sv_chop_left(params, 1);
-            size_t n = params->count;
-            param = sv_chop_left(params, n);
-        } else {
-            param = sv_chop_by_delim(params, ' ');
-        }
-
-        if (output) {
-            *output = param;
-        }
-
-        return true;
-    }
-
-    return false;
 }
 
 void usage(const char *program, FILE *stream)
@@ -139,9 +68,10 @@ int main(int argc, char **argv)
 
     Irc irc = irc_connect(HOST, PORT);
 
-    pass(irc.ssl, secret.password);
-    nick(irc.ssl, secret.nickname);
-    join(irc.ssl, secret.channel);
+    // TODO: no support for Twitch IRC tags
+    irc_pass(&irc, secret.password);
+    irc_nick(&irc, secret.nickname);
+    irc_join(&irc, secret.channel);
 
     // TODO: hot reloading of the commands is not implemented
     Commands commands = {0};
@@ -156,8 +86,6 @@ int main(int argc, char **argv)
             log_info(&log, "    "SV_Fmt, SV_Arg(commands.command_defs[i].name));
         }
     }
-
-    // TODO: no support for Twitch IRC tags
 
     // TODO: autoreconnect
     Buffer buffer = {0};
@@ -186,9 +114,9 @@ int main(int argc, char **argv)
                 if (sv_eq(command, SV("PING"))) {
                     String_View param = {0};
                     if (params_next(&params, &param)) {
-                        pong(irc.ssl, param);
+                        irc_pong(&irc, param);
                     } else {
-                        pong(irc.ssl, SV("tmi.twitch.tv"));
+                        irc_pong(&irc, SV("tmi.twitch.tv"));
                     }
                 } else if (sv_eq(command, SV("PRIVMSG"))) {
                     String_View channel = {0};
@@ -201,7 +129,7 @@ int main(int argc, char **argv)
                     if (command_call_parse(SV("%"), message, &command_call)) {
                         Command_Def def = {0};
                         if (commands_find_def(&commands, command_call.name, &def)) {
-                            privmsg(irc.ssl, channel, def.response);
+                            irc_privmsg(&irc, channel, def.response);
                         } else {
                             log_warn(&log, "Could not find command `"SV_Fmt"`", SV_Arg(command_call.name));
                         }
