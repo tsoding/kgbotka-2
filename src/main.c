@@ -7,7 +7,6 @@
 #include <ctype.h>
 
 #include "./arena.h"
-#include "./buffer.h"
 #include "./command.h"
 #include "./log.h"
 #include "./secret.h"
@@ -80,15 +79,22 @@ int main(int argc, char **argv)
     }
 
     // TODO: autoreconnect
-    Buffer buffer = {0};
-    char chunk[512];
-    ssize_t chunk_size = SSL_read(irc.ssl, chunk, sizeof(chunk));
-    while (chunk_size > 0) {
-        buffer_write(&buffer, chunk, chunk_size);
 
-        // TODO: we need to handle situations when the buffer starts to grow indefinitely due to the server not sending any \r\n
+#define BUFFER_DROPS_THRESHOLD 5
+    char buffer[4096];
+    size_t buffer_size = 0;
+
+    int read_size = SSL_read(irc.ssl, buffer + buffer_size, sizeof(buffer) - buffer_size);
+    size_t buffer_drops_count = 0;
+    while (read_size > 0 && buffer_drops_count < BUFFER_DROPS_THRESHOLD) {
+        buffer_size += read_size;
+
         {
-            String_View buffer_view = sv_from_buffer(buffer);
+            String_View buffer_view = {
+                .count = buffer_size,
+                .data = buffer,
+            };
+
             String_View line = {0};
             while (sv_try_chop_by_delim(&buffer_view, '\n', &line)) {
                 line = sv_trim(line);
@@ -123,16 +129,38 @@ int main(int argc, char **argv)
                         if (commands_find_def(&commands, command_call.name, &def)) {
                             irc_privmsg(&irc, channel, def.response);
                         } else {
-                            log_warn(&log, "Could not find command `"SV_Fmt"`", SV_Arg(command_call.name));
+                            log_warning(&log, "Could not find command `"SV_Fmt"`", SV_Arg(command_call.name));
                         }
                     }
                 }
             }
-            memmove(buffer.data, buffer_view.data, buffer_view.count);
-            buffer.size = buffer_view.count;
+
+            if (buffer_view.count == sizeof(buffer)) {
+                // NOTE: if after filling up the buffer completely we still
+                // could not process any valid IRC messages, we assume that server
+                // sent garbage and dropping it.
+                buffer_drops_count += 1;
+                log_warning(&log, "[%zu/%zu] Server sent garbage.",
+                            buffer_drops_count, (size_t) BUFFER_DROPS_THRESHOLD);
+                buffer_size = 0;
+            } else {
+                memmove(buffer, buffer_view.data, buffer_view.count);
+                buffer_size = buffer_view.count;
+                buffer_drops_count = 0;
+            }
         }
 
-        chunk_size = SSL_read(irc.ssl, chunk, sizeof(chunk));
+        read_size = SSL_read(irc.ssl, buffer + buffer_size, sizeof(buffer) - buffer_size);
+    }
+
+    if (buffer_drops_count >= BUFFER_DROPS_THRESHOLD) {
+        log_error(&log, "Server sent too much garbage");
+    }
+
+    if (read_size <= 0) {
+        char buf[512] = {0};
+        ERR_error_string_n(SSL_get_error(irc.ssl, read_size), buf, sizeof(buf));
+        log_error(&log, "SSL failed with error: %s\n", buf);
     }
 
     irc_destroy(irc);

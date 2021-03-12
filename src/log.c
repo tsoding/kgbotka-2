@@ -20,7 +20,7 @@ void log_info(Log *log, const char *fmt, ...)
     va_end(args);
 }
 
-void log_warn(Log *log, const char *fmt, ...)
+void log_warning(Log *log, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -30,13 +30,12 @@ void log_warn(Log *log, const char *fmt, ...)
     va_end(args);
 }
 
-void log_unlucky(Log *log, const char *fmt, ...)
+void log_error(Log *log, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    fprintf(log->handle, "[UNLUCKY] ");
+    fprintf(log->handle, "[ERROR] ");
     vfprintf(log->handle, fmt, args);
     fprintf(log->handle, "\n");
     va_end(args);
-    exit(1);
 }

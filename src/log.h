@@ -16,7 +16,7 @@ typedef struct {
 
 Log log_to_handle(FILE *handle);
 void log_info(Log *log, const char *fmt, ...) PRINTF_FORMAT(2, 3);
-void log_warn(Log *log, const char *fmt, ...) PRINTF_FORMAT(2, 3);
-void log_unlucky(Log *log, const char *fmt, ...) PRINTF_FORMAT(2, 3);
+void log_warning(Log *log, const char *fmt, ...) PRINTF_FORMAT(2, 3);
+void log_error(Log *log, const char *fmt, ...) PRINTF_FORMAT(2, 3);
 
 #endif // LOG_H_
