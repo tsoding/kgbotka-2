@@ -33,8 +33,8 @@ bool load_commands_file(Arena *arena, Log *log, String_View file_path, Commands 
 
     String_View content = {0};
     if (arena_slurp_file(arena, file_path, &content) < 0) {
-        log_warn(log, "Could not read file `"SV_Fmt"`: %s",
-                 SV_Arg(file_path), strerror(errno));
+        log_warning(log, "Could not read file `"SV_Fmt"`: %s",
+                    SV_Arg(file_path), strerror(errno));
         return false;
     }
 
@@ -51,8 +51,8 @@ bool load_commands_file(Arena *arena, Log *log, String_View file_path, Commands 
 
     Command_Def *command_defs = arena_alloc(arena, sizeof(Command_Def) * capacity);
     if (command_defs == NULL) {
-        log_warn(log, "Could not allocate memory for command definitions: %s\n",
-                 strerror(errno));
+        log_warning(log, "Could not allocate memory for command definitions: %s\n",
+                    strerror(errno));
         return false;
     }
 
@@ -67,7 +67,7 @@ bool load_commands_file(Arena *arena, Log *log, String_View file_path, Commands 
                     command_defs[count].response = sv_trim(line);
                     count += 1;
                 } else {
-                    log_unlucky(log, "Trying to add more command definitions than expected");
+                    log_error(log, "Trying to add more command definitions than expected");
                     exit(1);
                 }
             }
