@@ -133,40 +133,40 @@ void irc_destroy(Irc *irc)
     irc->sd = 0;
 }
 
-void irc_join(SSL *ssl, String_View channel)
+void irc_join(Irc *irc, String_View channel)
 {
-    SSL_write(ssl, "JOIN ", 5);
-    SSL_write(ssl, channel.data, channel.count);
-    SSL_write(ssl, "\n", 1);
+    SSL_write_cstr(irc->ssl, "JOIN ");
+    SSL_write_sv(irc->ssl, channel);
+    SSL_write_cstr(irc->ssl, "\n");
 }
 
-void irc_pass(SSL *ssl, String_View password)
+void irc_pass(Irc *irc, String_View password)
 {
-    SSL_write(ssl, "PASS ", 5);
-    SSL_write(ssl, password.data, password.count);
-    SSL_write(ssl, "\n", 1);
+    SSL_write_cstr(irc->ssl, "PASS ");
+    SSL_write_sv(irc->ssl, password);
+    SSL_write_cstr(irc->ssl, "\n");
 }
 
-void irc_nick(SSL *ssl, String_View nickname)
+void irc_nick(Irc *irc, String_View nickname)
 {
-    SSL_write(ssl, "NICK ", 5);
-    SSL_write(ssl, nickname.data, nickname.count);
-    SSL_write(ssl, "\n", 1);
+    SSL_write_cstr(irc->ssl, "NICK ");
+    SSL_write_sv(irc->ssl, nickname);
+    SSL_write_cstr(irc->ssl, "\n");
 }
 
-void irc_privmsg(SSL *ssl, String_View channel, String_View message)
+void irc_privmsg(Irc *irc, String_View channel, String_View message)
 {
-    SSL_write_cstr(ssl, "PRIVMSG ");
-    SSL_write_sv(ssl, channel);
-    SSL_write_cstr(ssl, " :");
-    SSL_write_sv(ssl, message);
-    SSL_write_cstr(ssl, "\n");
+    SSL_write_cstr(irc->ssl, "PRIVMSG ");
+    SSL_write_sv(irc->ssl, channel);
+    SSL_write_cstr(irc->ssl, " :");
+    SSL_write_sv(irc->ssl, message);
+    SSL_write_cstr(irc->ssl, "\n");
 }
 
-void irc_pong(SSL *ssl, String_View response)
+void irc_pong(Irc *irc, String_View response)
 {
-    SSL_write_cstr(ssl, "PONG :");
-    SSL_write_sv(ssl, response);
+    SSL_write_cstr(irc->ssl, "PONG :");
+    SSL_write_sv(irc->ssl, response);
 }
 
 bool params_next(String_View *params, String_View *output)

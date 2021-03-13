@@ -149,9 +149,9 @@ int main(int argc, char **argv)
     }
 
     // TODO: no support for Twitch IRC tags
-    irc_pass(irc.ssl, password);
-    irc_nick(irc.ssl, nickname);
-    irc_join(irc.ssl, channel);
+    irc_pass(&irc, password);
+    irc_nick(&irc, nickname);
+    irc_join(&irc, channel);
 
     // TODO: autoreconnect
 
@@ -187,9 +187,9 @@ int main(int argc, char **argv)
                 if (sv_eq(command, SV("PING"))) {
                     String_View param = {0};
                     if (params_next(&params, &param)) {
-                        irc_pong(irc.ssl, param);
+                        irc_pong(&irc, param);
                     } else {
-                        irc_pong(irc.ssl, SV("tmi.twitch.tv"));
+                        irc_pong(&irc, SV("tmi.twitch.tv"));
                     }
                 } else if (sv_eq(command, SV("PRIVMSG"))) {
                     String_View channel = {0};
