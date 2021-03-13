@@ -119,24 +119,24 @@ int main(int argc, char **argv)
                 } else if (sv_eq(key, SV("channel"))) {
                     channel = value;
                 } else {
-                    log_error(&log, "ERROR: unknown key `"SV_Fmt"`", SV_Arg(key));
+                    log_error(&log, "unknown key `"SV_Fmt"`", SV_Arg(key));
                     goto error;
                 }
             }
         }
 
         if (nickname.data == NULL) {
-            log_error(&log, "ERROR: `nickname` was not provided");
+            log_error(&log, "`nickname` was not provided");
             goto error;
         }
 
         if (password.data == NULL) {
-            log_error(&log, "ERROR: `password` was not provided");
+            log_error(&log, "`password` was not provided");
             goto error;
         }
 
         if (channel.data == NULL) {
-            log_error(&log, "ERROR: `channel` was not provided");
+            log_error(&log, "`channel` was not provided");
             goto error;
         }
     }
