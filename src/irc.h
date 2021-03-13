@@ -5,15 +5,15 @@
 #include <openssl/err.h>
 
 #include "./sv.h"
+#include "./log.h"
 
 typedef struct {
     SSL *ssl;
-    SSL_CTX *ctx;
     int sd;
 } Irc;
 
-Irc irc_connect(const char *host, const char *service);
-void irc_destroy(Irc irc);
+bool irc_connect(Log *log, Irc *irc, SSL_CTX *ctx, const char *host, const char *service);
+void irc_destroy(Irc *irc);
 
 void irc_pass(Irc *irc, String_View password);
 void irc_join(Irc *irc, String_View channel);
