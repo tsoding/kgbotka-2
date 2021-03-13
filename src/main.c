@@ -12,20 +12,6 @@
 #define HOST "irc.chat.twitch.tv"
 #define PORT "6697"
 
-char *shift(int *argc, char ***argv)
-{
-    assert(*argc > 0);
-    char *result = **argv;
-    *argv += 1;
-    *argc -= 1;
-    return result;
-}
-
-void usage(const char *program, FILE *stream)
-{
-    fprintf(stream, "Usage: %s <secret.conf>\n", program);
-}
-
 char *slurp_file(const char *file_path)
 {
     FILE *f = NULL;
@@ -76,24 +62,40 @@ error:
     return NULL;
 }
 
+char *shift(int *argc, char ***argv)
+{
+    assert(*argc > 0);
+    char *result = **argv;
+    *argv += 1;
+    *argc -= 1;
+    return result;
+}
+
+void usage(const char *program, FILE *stream)
+{
+    fprintf(stream, "Usage: %s <secret.conf>\n", program);
+}
+
 int main(int argc, char **argv)
 {
+    char *secret_conf_content = NULL;
+
     Log log = log_to_handle(stdout);
 
     const char *const program = shift(&argc, &argv);        // skip program
 
     if (argc == 0) {
         usage(program, stderr);
-        log_error(&log, "path to state/ folder expected\n");
+        log_error(&log, "path to secret.conf file expected");
         goto error;
     }
 
     const char *const secret_conf_path = shift(&argc, &argv);
 
-    char *secret_conf_content = slurp_file(secret_conf_path);
-    if (secret_conf_content) {
+    secret_conf_content = slurp_file(secret_conf_path);
+    if (secret_conf_content == NULL) {
         log_error(&log, "Could not read file `%s`: %s",
-                  secret_conf_content, strerror(errno));
+                  secret_conf_path, strerror(errno));
         goto error;
     }
 
@@ -102,7 +104,7 @@ int main(int argc, char **argv)
     String_View channel  = SV_NULL;
 
     {
-        String_View content = {0};
+        String_View content = sv_from_cstr(secret_conf_content);
 
         while (content.count > 0) {
             String_View line = sv_trim(sv_chop_by_delim(&content, '\n'));
@@ -116,24 +118,24 @@ int main(int argc, char **argv)
                 } else if (sv_eq(key, SV("channel"))) {
                     channel = value;
                 } else {
-                    log_error(&log, "ERROR: unknown key `"SV_Fmt"`\n", SV_Arg(key));
+                    log_error(&log, "ERROR: unknown key `"SV_Fmt"`", SV_Arg(key));
                     goto error;
                 }
             }
         }
 
         if (nickname.data == NULL) {
-            log_error(&log, "ERROR: `nickname` was not provided\n");
+            log_error(&log, "ERROR: `nickname` was not provided");
             goto error;
         }
 
         if (password.data == NULL) {
-            log_error(&log, "ERROR: `password` was not provided\n");
+            log_error(&log, "ERROR: `password` was not provided");
             goto error;
         }
 
         if (channel.data == NULL) {
-            log_error(&log, "ERROR: `channel` was not provided\n");
+            log_error(&log, "ERROR: `channel` was not provided");
             goto error;
         }
     }
@@ -217,7 +219,7 @@ int main(int argc, char **argv)
     if (read_size <= 0) {
         char buf[512] = {0};
         ERR_error_string_n(SSL_get_error(irc.ssl, read_size), buf, sizeof(buf));
-        log_error(&log, "SSL failed with error: %s\n", buf);
+        log_error(&log, "SSL failed with error: %s", buf);
     }
 
     irc_destroy(irc);
