@@ -8,6 +8,9 @@
 
 #include "./log.h"
 #include "./irc.h"
+#include "./cmd.h"
+
+#define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
 #define HOST "irc.chat.twitch.tv"
 #define PORT "6697"
@@ -87,9 +90,9 @@ int main(int argc, char **argv)
     SSL_CTX *ctx = NULL;
 
     // Secret configuration
-    String_View nickname = SV_NULL;
-    String_View password = SV_NULL;
-    String_View channel  = SV_NULL;
+    String_View secret_nickname = SV_NULL;
+    String_View secret_password = SV_NULL;
+    String_View secret_channel  = SV_NULL;
 
     // Parse secret.conf
     {
@@ -118,11 +121,11 @@ int main(int argc, char **argv)
                 String_View key = sv_trim(sv_chop_by_delim(&line, '='));
                 String_View value = sv_trim(line);
                 if (sv_eq(key, SV("nickname"))) {
-                    nickname = value;
+                    secret_nickname = value;
                 } else if (sv_eq(key, SV("password"))) {
-                    password = value;
+                    secret_password = value;
                 } else if (sv_eq(key, SV("channel"))) {
-                    channel = value;
+                    secret_channel = value;
                 } else {
                     log_error(&log, "unknown key `"SV_Fmt"`", SV_Arg(key));
                     goto error;
@@ -130,17 +133,17 @@ int main(int argc, char **argv)
             }
         }
 
-        if (nickname.data == NULL) {
+        if (secret_nickname.data == NULL) {
             log_error(&log, "`nickname` was not provided");
             goto error;
         }
 
-        if (password.data == NULL) {
+        if (secret_password.data == NULL) {
             log_error(&log, "`password` was not provided");
             goto error;
         }
 
-        if (channel.data == NULL) {
+        if (secret_channel.data == NULL) {
             log_error(&log, "`channel` was not provided");
             goto error;
         }
@@ -167,9 +170,9 @@ int main(int argc, char **argv)
         }
 
         // TODO: no support for Twitch IRC tags
-        irc_pass(&irc, password);
-        irc_nick(&irc, nickname);
-        irc_join(&irc, channel);
+        irc_pass(&irc, secret_password);
+        irc_nick(&irc, secret_nickname);
+        irc_join(&irc, secret_channel);
     }
 
     // IRC event loop
@@ -195,28 +198,48 @@ int main(int argc, char **argv)
                     line = sv_trim(line);
                     log_info(&log, SV_Fmt, SV_Arg(line));
 
-                    if (sv_starts_with(line, SV(":"))) {
-                        String_View prefix = sv_chop_by_delim(&line, ' ');
-                        (void) prefix;
-                    }
-
-                    String_View command = sv_chop_by_delim(&line, ' ');
-
-                    String_View params = line;
-
-                    if (sv_eq(command, SV("PING"))) {
-                        String_View param = {0};
-                        if (params_next(&params, &param)) {
-                            irc_pong(&irc, param);
-                        } else {
-                            irc_pong(&irc, SV("tmi.twitch.tv"));
+                    // Process the IRC messsage
+                    {
+                        if (sv_starts_with(line, SV(":"))) {
+                            String_View prefix = sv_chop_by_delim(&line, ' ');
+                            (void) prefix;
                         }
-                    } else if (sv_eq(command, SV("PRIVMSG"))) {
-                        String_View channel = {0};
-                        params_next(&params, &channel);
 
-                        String_View message = {0};
-                        params_next(&params, &message);
+                        String_View irc_command = sv_chop_by_delim(&line, ' ');
+                        String_View irc_params = line;
+
+                        if (sv_eq(irc_command, SV("PING"))) {
+                            String_View param = {0};
+                            if (params_next(&irc_params, &param)) {
+                                irc_pong(&irc, param);
+                            } else {
+                                irc_pong(&irc, SV("tmi.twitch.tv"));
+                            }
+                        } else if (sv_eq(irc_command, SV("PRIVMSG"))) {
+                            String_View irc_channel = {0};
+                            params_next(&irc_params, &irc_channel);
+
+                            String_View message = {0};
+                            params_next(&irc_params, &message);
+
+                            // Handle user command
+                            {
+                                message = sv_trim_left(message);
+                                if (sv_starts_with(message, SV(CMD_PREFIX))) {
+                                    sv_chop_left(&message, 1);
+                                    message = sv_trim_left(message);
+                                    String_View cmd_name = sv_trim(sv_chop_by_delim(&message, ' '));
+                                    String_View cmd_args = message;
+
+                                    Cmd_Run cmd_run = find_cmd_by_name(cmd_name);
+                                    if (cmd_run) {
+                                        cmd_run(&irc, &log, irc_channel, cmd_args);
+                                    } else {
+                                        log_warning(&log, "Could not find command `"SV_Fmt"`", SV_Arg(cmd_name));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
