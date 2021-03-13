@@ -22,7 +22,7 @@ void SSL_write_sv(SSL *ssl, String_View sv)
     SSL_write(ssl, sv.data, sv.count);
 }
 
-bool irc_connect(Log *log, Irc *irc, const char *host, const char *service)
+bool irc_connect(Log *log, Irc *irc, SSL_CTX *ctx, const char *host, const char *service)
 {
     // Resources to destroy at the end
     struct addrinfo *addrs = NULL;
@@ -72,20 +72,8 @@ bool irc_connect(Log *log, Irc *irc, const char *host, const char *service)
 
     // Upgrade to SSL connection
     {
-        // TODO: move this global ssl initialization to main.c
-        OpenSSL_add_all_algorithms();
-        SSL_load_error_strings();
-        irc->ctx = SSL_CTX_new(TLS_client_method());
-
-        if (irc->ctx == NULL) {
-            // TODO: SSL_CTX_new error is not located in errno
-            log_error(log, "Could not initialize the SSL context: %s",
-                      strerror(errno));
-            goto error;
-        }
-
         // TODO: SSL_new() can fail
-        irc->ssl = SSL_new(irc->ctx);
+        irc->ssl = SSL_new(ctx);
 
         // TODO: SSL_set_fd() can fail
         SSL_set_fd(irc->ssl, irc->sd);
@@ -122,11 +110,6 @@ void irc_destroy(Irc *irc)
         SSL_shutdown(irc->ssl);
         SSL_free(irc->ssl);
         irc->ssl = NULL;
-    }
-
-    if (irc->ctx) {
-        SSL_CTX_free(irc->ctx);
-        irc->ctx = NULL;
     }
 
     close(irc->sd);

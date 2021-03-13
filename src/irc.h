@@ -9,11 +9,10 @@
 
 typedef struct {
     SSL *ssl;
-    SSL_CTX *ctx;
     int sd;
 } Irc;
 
-bool irc_connect(Log *log, Irc *irc, const char *host, const char *service);
+bool irc_connect(Log *log, Irc *irc, SSL_CTX *ctx, const char *host, const char *service);
 void irc_destroy(Irc *irc);
 
 void irc_pass(Irc *irc, String_View password);

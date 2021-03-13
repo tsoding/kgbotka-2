@@ -79,11 +79,12 @@ void usage(const char *program, FILE *stream)
 
 int main(int argc, char **argv)
 {
+    Log log = log_to_handle(stdout);
+
     // Resource to destroy at the end
     char *secret_conf_content = NULL;
     Irc irc = {0};
-
-    Log log = log_to_handle(stdout);
+    SSL_CTX *ctx = NULL;
 
     // Secret configuration
     String_View nickname = SV_NULL;
@@ -145,9 +146,23 @@ int main(int argc, char **argv)
         }
     }
 
+    // Initialize SSL context
+    {
+        OpenSSL_add_all_algorithms();
+        SSL_load_error_strings();
+        ctx = SSL_CTX_new(TLS_client_method());
+
+        if (ctx == NULL) {
+            // TODO: SSL_CTX_new error is not located in errno
+            log_error(&log, "Could not initialize the SSL context: %s",
+                      strerror(errno));
+            goto error;
+        }
+    }
+
     // Connect to IRC
     {
-        if (!irc_connect(&log, &irc, HOST, PORT)) {
+        if (!irc_connect(&log, &irc, ctx, HOST, PORT)) {
             goto error;
         }
 
@@ -155,12 +170,11 @@ int main(int argc, char **argv)
         irc_pass(&irc, password);
         irc_nick(&irc, nickname);
         irc_join(&irc, channel);
-
-        // TODO: autoreconnect
     }
 
     // IRC event loop
     {
+        // TODO: autoreconnect
 #define BUFFER_DROPS_THRESHOLD 5
         char buffer[4096];
         size_t buffer_size = 0;
@@ -237,21 +251,35 @@ int main(int argc, char **argv)
         }
     }
 
-// ok:
-    if (secret_conf_content) {
-        free(secret_conf_content);
-    }
+    // Destroy resources and exit with success
+    {
+        if (secret_conf_content) {
+            free(secret_conf_content);
+        }
 
-    irc_destroy(&irc);
+        irc_destroy(&irc);
+
+        if (ctx) {
+            SSL_CTX_free(ctx);
+        }
+    }
 
     return 0;
 
 error:
-    if (secret_conf_content) {
-        free(secret_conf_content);
-    }
 
-    irc_destroy(&irc);
+    // Destroy resources and exit with failure
+    {
+        if (secret_conf_content) {
+            free(secret_conf_content);
+        }
+
+        irc_destroy(&irc);
+
+        if (ctx) {
+            SSL_CTX_free(ctx);
+        }
+    }
 
     return -1;
 }
