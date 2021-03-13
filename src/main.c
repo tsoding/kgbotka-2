@@ -152,7 +152,7 @@ int main(int argc, char **argv)
             goto error;
         }
 
-        log_info(&log, "Parsed secret.conf successfully");
+        log_info(&log, "Parsed `%s` successfully", secret_conf_path);
     }
 
     // Initialize CURL
