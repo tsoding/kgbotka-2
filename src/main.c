@@ -6,9 +6,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 
-#include "./arena.h"
 #include "./log.h"
-#include "./secret.h"
 #include "./irc.h"
 
 #define HOST "irc.chat.twitch.tv"
@@ -28,30 +26,124 @@ void usage(const char *program, FILE *stream)
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
 }
 
-Arena secret_arena = {0};
-Arena commands_arena = {0};
+char *slurp_file(const char *file_path)
+{
+    FILE *f = NULL;
+    char *buffer = NULL;
+
+    f = fopen(file_path, "r");
+    if (f == NULL) {
+        goto error;
+    }
+
+    if (fseek(f, 0, SEEK_END) < 0) {
+        goto error;
+    }
+
+    long m = ftell(f);
+    if (m < 0) {
+        goto error;
+    }
+
+    buffer = malloc((size_t) m + 1);
+    if (buffer == NULL) {
+        goto error;
+    }
+
+    if (fseek(f, 0, SEEK_SET) < 0) {
+        goto error;
+    }
+
+    fread(buffer, 1, (size_t) m, f);
+    if (ferror(f)) {
+        goto error;
+    }
+    buffer[m] = '\0';
+
+    fclose(f);
+
+    return buffer;
+
+error:
+    if (f) {
+        fclose(f);
+    }
+
+    if (buffer) {
+        free(buffer);
+    }
+
+    return NULL;
+}
 
 int main(int argc, char **argv)
 {
+    Log log = log_to_handle(stdout);
+
     const char *const program = shift(&argc, &argv);        // skip program
 
     if (argc == 0) {
         usage(program, stderr);
-        fprintf(stderr, "ERROR: path to state/ folder expected\n");
-        exit(1);
+        log_error(&log, "path to state/ folder expected\n");
+        goto error;
     }
 
-    const String_View secret_conf_path = sv_from_cstr(shift(&argc, &argv));
+    const char *const secret_conf_path = shift(&argc, &argv);
 
-    Secret secret = secret_from_file(&secret_arena, secret_conf_path);
-    Log log = log_to_handle(stdout);
+    char *secret_conf_content = slurp_file(secret_conf_path);
+    if (secret_conf_content) {
+        log_error(&log, "Could not read file `%s`: %s",
+                  secret_conf_content, strerror(errno));
+        goto error;
+    }
+
+    String_View nickname = SV_NULL;
+    String_View password = SV_NULL;
+    String_View channel  = SV_NULL;
+
+    {
+        String_View content = {0};
+
+        while (content.count > 0) {
+            String_View line = sv_trim(sv_chop_by_delim(&content, '\n'));
+            if (line.count > 0) {
+                String_View key = sv_trim(sv_chop_by_delim(&line, '='));
+                String_View value = sv_trim(line);
+                if (sv_eq(key, SV("nickname"))) {
+                    nickname = value;
+                } else if (sv_eq(key, SV("password"))) {
+                    password = value;
+                } else if (sv_eq(key, SV("channel"))) {
+                    channel = value;
+                } else {
+                    log_error(&log, "ERROR: unknown key `"SV_Fmt"`\n", SV_Arg(key));
+                    goto error;
+                }
+            }
+        }
+
+        if (nickname.data == NULL) {
+            log_error(&log, "ERROR: `nickname` was not provided\n");
+            goto error;
+        }
+
+        if (password.data == NULL) {
+            log_error(&log, "ERROR: `password` was not provided\n");
+            goto error;
+        }
+
+        if (channel.data == NULL) {
+            log_error(&log, "ERROR: `channel` was not provided\n");
+            goto error;
+        }
+    }
 
     Irc irc = irc_connect(HOST, PORT);
 
     // TODO: no support for Twitch IRC tags
-    irc_pass(&irc, secret.password);
-    irc_nick(&irc, secret.nickname);
-    irc_join(&irc, secret.channel);
+    irc_pass(&irc, password);
+    irc_nick(&irc, nickname);
+    irc_join(&irc, channel);
 
     // TODO: autoreconnect
 
@@ -130,5 +222,16 @@ int main(int argc, char **argv)
 
     irc_destroy(irc);
 
+    if (secret_conf_content) {
+        free(secret_conf_content);
+    }
+
     return 0;
+
+error:
+    if (secret_conf_content) {
+        free(secret_conf_content);
+    }
+
+    return -1;
 }
