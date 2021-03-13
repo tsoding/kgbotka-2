@@ -22,80 +22,115 @@ void SSL_write_sv(SSL *ssl, String_View sv)
     SSL_write(ssl, sv.data, sv.count);
 }
 
-Irc irc_connect(const char *host, const char *service)
+bool irc_connect(Log *log, Irc *irc, const char *host, const char *service)
 {
-    struct addrinfo hints = {0};
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
+    // Resources to destroy at the end
+    struct addrinfo *addrs = NULL;
 
-    struct addrinfo *addrs;
-    if (getaddrinfo(host, service, &hints, &addrs) < 0) {
-        fprintf(stderr, "ERROR: Could not get address of `%s`: %s",
-                host, strerror(errno));
-        exit(1);
+    // Destroy irc just in case before trying to create a new one
+    {
+        irc_destroy(irc);
     }
 
-    Irc result = {0};
+    // Plain socket connection
+    {
+        struct addrinfo hints = {0};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
 
-    result.sd = 0;
-    for (struct addrinfo *addr = addrs; addr != NULL; addr = addr->ai_next) {
-        // TODO: don't recreate socket on each attempt
-        // Just create a single socket with the appropriate family and type
-        // and keep using it.
-        result.sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-
-        if (result.sd == -1) {
-            break;
+        if (getaddrinfo(host, service, &hints, &addrs) < 0) {
+            log_error(log, "Could not get address of `%s`: %s", host, strerror(errno));
+            goto error;
         }
 
-        if (connect(result.sd, addr->ai_addr, addr->ai_addrlen) == 0) {
-            break;
+        irc->sd = 0;
+        for (struct addrinfo *addr = addrs; addr != NULL; addr = addr->ai_next) {
+            // TODO: don't recreate socket on each attempt
+            // Just create a single socket with the appropriate family and type
+            // and keep using it.
+            irc->sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+
+            if (irc->sd == -1) {
+                break;
+            }
+
+            if (connect(irc->sd, addr->ai_addr, addr->ai_addrlen) == 0) {
+                break;
+            }
+
+            close(irc->sd);
+            irc->sd = -1;
         }
 
-        close(result.sd);
-        result.sd = -1;
-    }
-    freeaddrinfo(addrs);
-
-    if (result.sd == -1) {
-        fprintf(stderr, "ERROR: Could not connect to %s:%s: %s",
-                host, service, strerror(errno));
-        exit(1);
+        if (irc->sd == -1) {
+            log_error(log, "Could not connect to %s:%s: %s",
+                      host, service, strerror(errno));
+            goto error;
+        }
     }
 
-    //////////////////////////////
+    // Upgrade to SSL connection
+    {
+        // TODO: move this global ssl initialization to main.c
+        OpenSSL_add_all_algorithms();
+        SSL_load_error_strings();
+        irc->ctx = SSL_CTX_new(TLS_client_method());
 
-    OpenSSL_add_all_algorithms();
-    SSL_load_error_strings();
-    result.ctx = SSL_CTX_new(TLS_client_method());
+        if (irc->ctx == NULL) {
+            // TODO: SSL_CTX_new error is not located in errno
+            log_error(log, "Could not initialize the SSL context: %s",
+                      strerror(errno));
+            goto error;
+        }
 
-    if (result.ctx == NULL) {
-        fprintf(stderr, "ERROR: Could not initialize the SSL context: %s",
-                strerror(errno));
-        exit(1);
+        // TODO: SSL_new() can fail
+        irc->ssl = SSL_new(irc->ctx);
+
+        // TODO: SSL_set_fd() can fail
+        SSL_set_fd(irc->ssl, irc->sd);
+
+        if (SSL_connect(irc->ssl) < 0) {
+            // TODO: SSL_connect is not located in errno
+            log_error(log, "Could not connect via SSL: %s",
+                      strerror(errno));
+            goto error;
+        }
     }
 
-    result.ssl = SSL_new(result.ctx);
-    SSL_set_fd(result.ssl, result.sd);
-
-    if (SSL_connect(result.ssl) < 0) {
-        fprintf(stderr, "ERROR: Could not connect via SSL: %s",
-                strerror(errno));
-        exit(1);
+// ok:
+    if (addrs) {
+        freeaddrinfo(addrs);
     }
 
-    return result;
+    return true;
+
+error:
+    if (addrs) {
+        freeaddrinfo(addrs);
+    }
+
+    irc_destroy(irc);
+
+    return false;
 }
 
-void irc_destroy(Irc irc)
+void irc_destroy(Irc *irc)
 {
-    SSL_set_shutdown(irc.ssl, SSL_RECEIVED_SHUTDOWN | SSL_SENT_SHUTDOWN);
-    SSL_shutdown(irc.ssl);
-    SSL_free(irc.ssl);
-    SSL_CTX_free(irc.ctx);
+    if (irc->ssl) {
+        SSL_set_shutdown(irc->ssl, SSL_RECEIVED_SHUTDOWN | SSL_SENT_SHUTDOWN);
+        SSL_shutdown(irc->ssl);
+        SSL_free(irc->ssl);
+        irc->ssl = NULL;
+    }
 
-    close(irc.sd);
+    if (irc->ctx) {
+        SSL_CTX_free(irc->ctx);
+        irc->ctx = NULL;
+    }
+
+    close(irc->sd);
+    irc->sd = 0;
 }
 
 void irc_join(SSL *ssl, String_View channel)

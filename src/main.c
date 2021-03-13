@@ -80,6 +80,9 @@ void usage(const char *program, FILE *stream)
 int main(int argc, char **argv)
 {
     char *secret_conf_content = NULL;
+    Irc irc = {0};
+
+    //////////////////////////////
 
     Log log = log_to_handle(stdout);
 
@@ -141,7 +144,9 @@ int main(int argc, char **argv)
         }
     }
 
-    Irc irc = irc_connect(HOST, PORT);
+    if (!irc_connect(&log, &irc, HOST, PORT)) {
+        goto error;
+    }
 
     // TODO: no support for Twitch IRC tags
     irc_pass(irc.ssl, password);
@@ -215,20 +220,22 @@ int main(int argc, char **argv)
 
     if (buffer_drops_count >= BUFFER_DROPS_THRESHOLD) {
         log_error(&log, "Server sent too much garbage");
+        goto error;
     }
 
     if (read_size <= 0) {
         char buf[512] = {0};
         ERR_error_string_n(SSL_get_error(irc.ssl, read_size), buf, sizeof(buf));
         log_error(&log, "SSL failed with error: %s", buf);
+        goto error;
     }
-
-    irc_destroy(irc);
 
 // ok:
     if (secret_conf_content) {
         free(secret_conf_content);
     }
+
+    irc_destroy(&irc);
 
     return 0;
 
@@ -236,6 +243,8 @@ error:
     if (secret_conf_content) {
         free(secret_conf_content);
     }
+
+    irc_destroy(&irc);
 
     return -1;
 }
