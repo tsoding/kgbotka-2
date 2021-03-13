@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <ctype.h>
 
+#include <curl/curl.h>
+
 #include "./log.h"
 #include "./irc.h"
 #include "./cmd.h"
@@ -85,6 +87,8 @@ int main(int argc, char **argv)
     Log log = log_to_handle(stdout);
 
     // Resource to destroy at the end
+    bool curl_global_initalized = false;
+    CURL *curl = NULL;
     char *secret_conf_content = NULL;
     Irc irc = {0};
     SSL_CTX *ctx = NULL;
@@ -147,6 +151,25 @@ int main(int argc, char **argv)
             log_error(&log, "`channel` was not provided");
             goto error;
         }
+
+        log_info(&log, "Parsed secret.conf successfully");
+    }
+
+    // Initialize CURL
+    {
+        if (curl_global_init(CURL_GLOBAL_DEFAULT) != 0) {
+            log_error(&log, "Could not initialize global CURL state for some reason");
+            goto error;
+        }
+        curl_global_initalized = true;
+
+        curl = curl_easy_init();
+        if (curl == NULL) {
+            log_error(&log, "Could not initialize CURL context for some reason");
+            goto error;
+        }
+
+        log_info(&log, "Initialized CURL successfully");
     }
 
     // Initialize SSL context
@@ -161,6 +184,8 @@ int main(int argc, char **argv)
                       strerror(errno));
             goto error;
         }
+
+        log_info(&log, "Initialized SSL successfully");
     }
 
     // Connect to IRC
@@ -168,6 +193,8 @@ int main(int argc, char **argv)
         if (!irc_connect(&log, &irc, ctx, HOST, PORT)) {
             goto error;
         }
+
+        log_info(&log, "Connected to Twitch IRC successfully");
 
         // TODO: no support for Twitch IRC tags
         irc_pass(&irc, secret_password);
@@ -285,6 +312,14 @@ int main(int argc, char **argv)
         if (ctx) {
             SSL_CTX_free(ctx);
         }
+
+        if (curl) {
+            curl_easy_cleanup(curl);
+        }
+
+        if (curl_global_initalized) {
+            curl_global_cleanup();
+        }
     }
 
     return 0;
@@ -301,6 +336,14 @@ error:
 
         if (ctx) {
             SSL_CTX_free(ctx);
+        }
+
+        if (curl) {
+            curl_easy_cleanup(curl);
+        }
+
+        if (curl_global_initalized) {
+            curl_global_cleanup();
         }
     }
 
