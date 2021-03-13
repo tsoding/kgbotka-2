@@ -46,6 +46,7 @@ char *slurp_file(const char *file_path)
     }
     buffer[m] = '\0';
 
+// ok:
     fclose(f);
 
     return buffer;
@@ -224,6 +225,7 @@ int main(int argc, char **argv)
 
     irc_destroy(irc);
 
+// ok:
     if (secret_conf_content) {
         free(secret_conf_content);
     }
