@@ -11,6 +11,7 @@
 #include "./log.h"
 #include "./irc.h"
 #include "./cmd.h"
+#include "./region.h"
 
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
@@ -92,6 +93,7 @@ int main(int argc, char **argv)
     char *secret_conf_content = NULL;
     Irc irc = {0};
     SSL_CTX *ctx = NULL;
+    Region *cmd_region = NULL;
 
     // Secret configuration
     String_View secret_nickname = SV_NULL;
@@ -188,6 +190,21 @@ int main(int argc, char **argv)
         log_info(&log, "Initialized SSL successfully");
     }
 
+    // Allocate memory region for commands
+    {
+        // NOTE: command that needs more than 10MB of memory is sus ngl
+        const size_t CMD_REGION_CAPACITY = 10 * 1000 * 1000;
+        // NOTE: the lifetime of this region is a single command execution.
+        // After a command finished its execution the entire region is cleaned up.
+        cmd_region = region_new(CMD_REGION_CAPACITY);
+        if (cmd_region == NULL) {
+            log_error(&log, "Could not allocate memory for commands");
+            goto error;
+        }
+
+        log_info(&log, "Successfully allocated memory for commands");
+    }
+
     // Connect to IRC
     {
         if (!irc_connect(&log, &irc, ctx, HOST, PORT)) {
@@ -260,7 +277,8 @@ int main(int argc, char **argv)
 
                                     Cmd_Run cmd_run = find_cmd_by_name(cmd_name);
                                     if (cmd_run) {
-                                        cmd_run(&irc, &log, irc_channel, cmd_args);
+                                        cmd_run(&irc, &log, curl, cmd_region, irc_channel, cmd_args);
+                                        region_clean(cmd_region);
                                     } else {
                                         log_warning(&log, "Could not find command `"SV_Fmt"`", SV_Arg(cmd_name));
                                     }
@@ -320,6 +338,10 @@ int main(int argc, char **argv)
         if (curl_global_initalized) {
             curl_global_cleanup();
         }
+
+        if (cmd_region) {
+            region_free(cmd_region);
+        }
     }
 
     return 0;
@@ -344,6 +366,10 @@ error:
 
         if (curl_global_initalized) {
             curl_global_cleanup();
+        }
+
+        if (cmd_region) {
+            region_free(cmd_region);
         }
     }
 
