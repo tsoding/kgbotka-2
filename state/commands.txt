@@ -1,9 +1,0 @@
-ping = pong
-bing = bong
-ding = dong
-bong = CiGrip
-dong = gachiHYPER
-pig = oink
-ling = long
-sing = song
-ting = skraaaa
