@@ -23,7 +23,19 @@ void *region_alloc(Region *region, size_t size)
     }
 
     void *result = region->buffer + region->size;
+    memset(result, 0, size);
     region->size += size;
+    return result;
+}
+
+void *region_write(Region *region, char *data, size_t size)
+{
+    void *result = region_alloc(region, size);
+    if (result == NULL) {
+        return result;
+    }
+
+    memcpy(result, data, size);
     return result;
 }
 

@@ -87,7 +87,9 @@ int main(int argc, char **argv)
 {
     Log log = log_to_handle(stdout);
 
+
     // Resource to destroy at the end
+    // TODO: handle POSIX signals to finalize the resource properly
     bool curl_global_initalized = false;
     CURL *curl = NULL;
     char *secret_conf_content = NULL;
