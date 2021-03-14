@@ -6,9 +6,12 @@
 #include <stdbool.h>
 #include <ctype.h>
 
+#include <curl/curl.h>
+
 #include "./log.h"
 #include "./irc.h"
 #include "./cmd.h"
+#include "./region.h"
 
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
@@ -84,10 +87,15 @@ int main(int argc, char **argv)
 {
     Log log = log_to_handle(stdout);
 
+
     // Resource to destroy at the end
+    // TODO: handle POSIX signals to finalize the resource properly
+    bool curl_global_initalized = false;
+    CURL *curl = NULL;
     char *secret_conf_content = NULL;
     Irc irc = {0};
     SSL_CTX *ctx = NULL;
+    Region *cmd_region = NULL;
 
     // Secret configuration
     String_View secret_nickname = SV_NULL;
@@ -147,6 +155,25 @@ int main(int argc, char **argv)
             log_error(&log, "`channel` was not provided");
             goto error;
         }
+
+        log_info(&log, "Parsed `%s` successfully", secret_conf_path);
+    }
+
+    // Initialize CURL
+    {
+        if (curl_global_init(CURL_GLOBAL_DEFAULT) != 0) {
+            log_error(&log, "Could not initialize global CURL state for some reason");
+            goto error;
+        }
+        curl_global_initalized = true;
+
+        curl = curl_easy_init();
+        if (curl == NULL) {
+            log_error(&log, "Could not initialize CURL context for some reason");
+            goto error;
+        }
+
+        log_info(&log, "Initialized CURL successfully");
     }
 
     // Initialize SSL context
@@ -161,6 +188,23 @@ int main(int argc, char **argv)
                       strerror(errno));
             goto error;
         }
+
+        log_info(&log, "Initialized SSL successfully");
+    }
+
+    // Allocate memory region for commands
+    {
+        // NOTE: command that needs more than 10MB of memory is sus ngl
+        const size_t CMD_REGION_CAPACITY = 10 * 1000 * 1000;
+        // NOTE: the lifetime of this region is a single command execution.
+        // After a command finished its execution the entire region is cleaned up.
+        cmd_region = region_new(CMD_REGION_CAPACITY);
+        if (cmd_region == NULL) {
+            log_error(&log, "Could not allocate memory for commands");
+            goto error;
+        }
+
+        log_info(&log, "Successfully allocated memory for commands");
     }
 
     // Connect to IRC
@@ -168,6 +212,8 @@ int main(int argc, char **argv)
         if (!irc_connect(&log, &irc, ctx, HOST, PORT)) {
             goto error;
         }
+
+        log_info(&log, "Connected to Twitch IRC successfully");
 
         // TODO: no support for Twitch IRC tags
         irc_pass(&irc, secret_password);
@@ -233,7 +279,8 @@ int main(int argc, char **argv)
 
                                     Cmd_Run cmd_run = find_cmd_by_name(cmd_name);
                                     if (cmd_run) {
-                                        cmd_run(&irc, &log, irc_channel, cmd_args);
+                                        cmd_run(&irc, &log, curl, cmd_region, irc_channel, cmd_args);
+                                        region_clean(cmd_region);
                                     } else {
                                         log_warning(&log, "Could not find command `"SV_Fmt"`", SV_Arg(cmd_name));
                                     }
@@ -285,6 +332,18 @@ int main(int argc, char **argv)
         if (ctx) {
             SSL_CTX_free(ctx);
         }
+
+        if (curl) {
+            curl_easy_cleanup(curl);
+        }
+
+        if (curl_global_initalized) {
+            curl_global_cleanup();
+        }
+
+        if (cmd_region) {
+            region_free(cmd_region);
+        }
     }
 
     return 0;
@@ -301,6 +360,18 @@ error:
 
         if (ctx) {
             SSL_CTX_free(ctx);
+        }
+
+        if (curl) {
+            curl_easy_cleanup(curl);
+        }
+
+        if (curl_global_initalized) {
+            curl_global_cleanup();
+        }
+
+        if (cmd_region) {
+            region_free(cmd_region);
         }
     }
 
