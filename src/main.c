@@ -16,7 +16,8 @@
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
 #define HOST "irc.chat.twitch.tv"
-#define PORT "6697"
+#define SECURE_PORT "6697"
+#define PLAIN_PORT "6667"
 
 char *slurp_file(const char *file_path)
 {
@@ -86,7 +87,6 @@ void usage(const char *program, FILE *stream)
 int main(int argc, char **argv)
 {
     Log log = log_to_handle(stdout);
-
 
     // Resource to destroy at the end
     // TODO: handle POSIX signals to finalize the resource properly
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 
     // Connect to IRC
     {
-        if (!irc_connect(&log, &irc, ctx, HOST, PORT)) {
+        if (!irc_connect_plain(&log, &irc, HOST, PLAIN_PORT)) {
             goto error;
         }
 
@@ -228,7 +228,7 @@ int main(int argc, char **argv)
         char buffer[4096];
         size_t buffer_size = 0;
 
-        int read_size = SSL_read(irc.ssl, buffer + buffer_size, sizeof(buffer) - buffer_size);
+        int read_size = irc_read(&irc, buffer + buffer_size, sizeof(buffer) - buffer_size);
         size_t buffer_drops_count = 0;
         while (read_size > 0 && buffer_drops_count < BUFFER_DROPS_THRESHOLD) {
             buffer_size += read_size;
@@ -305,7 +305,7 @@ int main(int argc, char **argv)
                 }
             }
 
-            read_size = SSL_read(irc.ssl, buffer + buffer_size, sizeof(buffer) - buffer_size);
+            read_size = irc_read(&irc, buffer + buffer_size, sizeof(buffer) - buffer_size);
         }
 
         if (buffer_drops_count >= BUFFER_DROPS_THRESHOLD) {
@@ -314,9 +314,13 @@ int main(int argc, char **argv)
         }
 
         if (read_size <= 0) {
-            char buf[512] = {0};
-            ERR_error_string_n(SSL_get_error(irc.ssl, read_size), buf, sizeof(buf));
-            log_error(&log, "SSL failed with error: %s", buf);
+            if (irc.ssl) {
+                char buf[512] = {0};
+                ERR_error_string_n(SSL_get_error(irc.ssl, read_size), buf, sizeof(buf));
+                log_error(&log, "SSL failed with error: %s", buf);
+            } else {
+                log_error(&log, "Plain connection failed with error: %s", strerror(errno));
+            }
             goto error;
         }
     }
