@@ -126,10 +126,11 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx, const char *host, cons
         // TODO: SSL_set_fd() can fail
         SSL_set_fd(irc->ssl, irc->sd);
 
-        if (SSL_connect(irc->ssl) < 0) {
-            // TODO: SSL_connect is not located in errno
-            log_error(log, "Could not connect via SSL: %s",
-                      strerror(errno));
+        int ret = SSL_connect(irc->ssl);
+        if (ret < 0) {
+            char buf[512] = {0};
+            ERR_error_string_n(SSL_get_error(irc->ssl, ret), buf, sizeof(buf));
+            log_error(log, "Could not connect via SSL: %s", buf);
             goto error;
         }
     }
