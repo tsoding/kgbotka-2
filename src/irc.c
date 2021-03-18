@@ -9,66 +9,126 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "./irc.h"
 
-void SSL_write_cstr(SSL *ssl, const char *cstr)
+int irc_read(Irc *irc, void *buf, size_t count)
 {
-    SSL_write(ssl, cstr, strlen(cstr));
+    if (irc->ssl) {
+        return SSL_read(irc->ssl, buf, count);
+    } else {
+        return read(irc->sd, buf, count);
+    }
 }
 
-void SSL_write_sv(SSL *ssl, String_View sv)
+int irc_write(Irc *irc, const void *buf, size_t count)
 {
-    SSL_write(ssl, sv.data, sv.count);
+    if (irc->ssl) {
+        return SSL_write(irc->ssl, buf, count);
+    } else {
+        return write(irc->sd, buf, count);
+    }
 }
 
-bool irc_connect(Log *log, Irc *irc, SSL_CTX *ctx, const char *host, const char *service)
+bool irc_read_again(Irc *irc, int ret)
 {
+    if (irc->ssl) {
+        return SSL_get_error(irc->ssl, ret) == SSL_ERROR_WANT_READ;
+    } else {
+        return errno == EAGAIN || errno == EWOULDBLOCK;
+    }
+}
+
+void irc_write_cstr(Irc *irc, const char *cstr)
+{
+    irc_write(irc, cstr, strlen(cstr));
+}
+
+void irc_write_sv(Irc *irc, String_View sv)
+{
+    irc_write(irc, sv.data, sv.count);
+}
+
+bool irc_connect_plain(Log *log, Irc *irc,
+                       const char *host, const char *service,
+                       bool nonblocking)
+{
+    irc_destroy(irc);
+
     // Resources to destroy at the end
     struct addrinfo *addrs = NULL;
 
-    // Destroy irc just in case before trying to create a new one
-    {
-        irc_destroy(irc);
+    struct addrinfo hints = {0};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    if (getaddrinfo(host, service, &hints, &addrs) < 0) {
+        log_error(log, "Could not get address of `%s`: %s", host, strerror(errno));
+        goto error;
     }
 
-    // Plain socket connection
-    {
-        struct addrinfo hints = {0};
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_protocol = IPPROTO_TCP;
-
-        if (getaddrinfo(host, service, &hints, &addrs) < 0) {
-            log_error(log, "Could not get address of `%s`: %s", host, strerror(errno));
-            goto error;
-        }
-
-        irc->sd = 0;
-        for (struct addrinfo *addr = addrs; addr != NULL; addr = addr->ai_next) {
-            // TODO: don't recreate socket on each attempt
-            // Just create a single socket with the appropriate family and type
-            // and keep using it.
-            irc->sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-
-            if (irc->sd == -1) {
-                break;
-            }
-
-            if (connect(irc->sd, addr->ai_addr, addr->ai_addrlen) == 0) {
-                break;
-            }
-
-            close(irc->sd);
-            irc->sd = -1;
-        }
+    irc->sd = 0;
+    for (struct addrinfo *addr = addrs; addr != NULL; addr = addr->ai_next) {
+        // TODO: don't recreate socket on each attempt
+        // Just create a single socket with the appropriate family and type
+        // and keep using it.
+        irc->sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
 
         if (irc->sd == -1) {
-            log_error(log, "Could not connect to %s:%s: %s",
-                      host, service, strerror(errno));
+            break;
+        }
+
+        if (connect(irc->sd, addr->ai_addr, addr->ai_addrlen) == 0) {
+            break;
+        }
+
+        close(irc->sd);
+        irc->sd = -1;
+    }
+
+    if (irc->sd == -1) {
+        log_error(log, "Could not connect to %s:%s: %s",
+                  host, service, strerror(errno));
+        goto error;
+    }
+
+    if (nonblocking) {
+        int flag = fcntl(irc->sd, F_GETFL);
+        if (flag < 0) {
+            log_error(log, "Could not get flags of socket: %s\n",
+                      strerror(errno));
             goto error;
         }
+
+        if (fcntl(irc->sd, F_SETFL, flag | O_NONBLOCK) < 0) {
+            log_error(log, "Could not make the socket non-blocking: %s\n",
+                      strerror(errno));
+            goto error;
+        }
+
+        log_info(log, "Marked the socket as non-blocking");
     }
+
+    if (addrs) {
+        freeaddrinfo(addrs);
+    }
+
+    return true;
+error:
+    if (addrs) {
+        freeaddrinfo(addrs);
+    }
+
+    return false;
+}
+
+bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
+                        const char *host, const char *service,
+                        bool nonblocking)
+{
+    irc_connect_plain(log, irc, host, service, false);
 
     // Upgrade to SSL connection
     {
@@ -78,26 +138,36 @@ bool irc_connect(Log *log, Irc *irc, SSL_CTX *ctx, const char *host, const char 
         // TODO: SSL_set_fd() can fail
         SSL_set_fd(irc->ssl, irc->sd);
 
-        if (SSL_connect(irc->ssl) < 0) {
-            // TODO: SSL_connect is not located in errno
-            log_error(log, "Could not connect via SSL: %s",
+        int ret = SSL_connect(irc->ssl);
+        if (ret < 0) {
+            char buf[512] = {0};
+            ERR_error_string_n(SSL_get_error(irc->ssl, ret), buf, sizeof(buf));
+            log_error(log, "Could not connect via SSL: %s", buf);
+            goto error;
+        }
+
+    }
+
+    // Mark it as non-blocking
+    if (nonblocking) {
+        int flag = fcntl(irc->sd, F_GETFL);
+        if (flag < 0) {
+            log_error(log, "Could not get flags of socket: %s\n",
                       strerror(errno));
             goto error;
         }
-    }
 
-// ok:
-    if (addrs) {
-        freeaddrinfo(addrs);
+        if (fcntl(irc->sd, F_SETFL, flag | O_NONBLOCK) < 0) {
+            log_error(log, "Could not make the socket non-blocking: %s\n",
+                      strerror(errno));
+            goto error;
+        }
+
+        log_info(log, "Marked the socket as non-blocking");
     }
 
     return true;
-
 error:
-    if (addrs) {
-        freeaddrinfo(addrs);
-    }
-
     irc_destroy(irc);
 
     return false;
@@ -118,38 +188,38 @@ void irc_destroy(Irc *irc)
 
 void irc_join(Irc *irc, String_View channel)
 {
-    SSL_write_cstr(irc->ssl, "JOIN ");
-    SSL_write_sv(irc->ssl, channel);
-    SSL_write_cstr(irc->ssl, "\n");
+    irc_write_cstr(irc, "JOIN ");
+    irc_write_sv(irc, channel);
+    irc_write_cstr(irc, "\n");
 }
 
 void irc_pass(Irc *irc, String_View password)
 {
-    SSL_write_cstr(irc->ssl, "PASS ");
-    SSL_write_sv(irc->ssl, password);
-    SSL_write_cstr(irc->ssl, "\n");
+    irc_write_cstr(irc, "PASS ");
+    irc_write_sv(irc, password);
+    irc_write_cstr(irc, "\n");
 }
 
 void irc_nick(Irc *irc, String_View nickname)
 {
-    SSL_write_cstr(irc->ssl, "NICK ");
-    SSL_write_sv(irc->ssl, nickname);
-    SSL_write_cstr(irc->ssl, "\n");
+    irc_write_cstr(irc, "NICK ");
+    irc_write_sv(irc, nickname);
+    irc_write_cstr(irc, "\n");
 }
 
 void irc_privmsg(Irc *irc, String_View channel, String_View message)
 {
-    SSL_write_cstr(irc->ssl, "PRIVMSG ");
-    SSL_write_sv(irc->ssl, channel);
-    SSL_write_cstr(irc->ssl, " :");
-    SSL_write_sv(irc->ssl, message);
-    SSL_write_cstr(irc->ssl, "\n");
+    irc_write_cstr(irc, "PRIVMSG ");
+    irc_write_sv(irc, channel);
+    irc_write_cstr(irc, " :");
+    irc_write_sv(irc, message);
+    irc_write_cstr(irc, "\n");
 }
 
 void irc_pong(Irc *irc, String_View response)
 {
-    SSL_write_cstr(irc->ssl, "PONG :");
-    SSL_write_sv(irc->ssl, response);
+    irc_write_cstr(irc, "PONG :");
+    irc_write_sv(irc, response);
 }
 
 bool params_next(String_View *params, String_View *output)

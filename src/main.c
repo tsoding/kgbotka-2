@@ -16,7 +16,8 @@
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
 #define HOST "irc.chat.twitch.tv"
-#define PORT "6697"
+#define SECURE_PORT "6697"
+#define PLAIN_PORT "6667"
 
 char *slurp_file(const char *file_path)
 {
@@ -86,7 +87,6 @@ void usage(const char *program, FILE *stream)
 int main(int argc, char **argv)
 {
     Log log = log_to_handle(stdout);
-
 
     // Resource to destroy at the end
     // TODO: handle POSIX signals to finalize the resource properly
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 
     // Connect to IRC
     {
-        if (!irc_connect(&log, &irc, ctx, HOST, PORT)) {
+        if (!irc_connect_secure(&log, &irc, ctx, HOST, SECURE_PORT, true)) {
             goto error;
         }
 
@@ -228,84 +228,87 @@ int main(int argc, char **argv)
         char buffer[4096];
         size_t buffer_size = 0;
 
-        int read_size = SSL_read(irc.ssl, buffer + buffer_size, sizeof(buffer) - buffer_size);
+        int read_size = irc_read(&irc, buffer + buffer_size, sizeof(buffer) - buffer_size);
         size_t buffer_drops_count = 0;
-        while (read_size > 0 && buffer_drops_count < BUFFER_DROPS_THRESHOLD) {
-            buffer_size += read_size;
+        while ((read_size > 0 || irc_read_again(&irc, read_size)) &&
+                buffer_drops_count < BUFFER_DROPS_THRESHOLD) {
+            if (read_size > 0) {
+                buffer_size += read_size;
 
-            {
-                String_View buffer_view = {
-                    .count = buffer_size,
-                    .data = buffer,
-                };
+                {
+                    String_View buffer_view = {
+                        .count = buffer_size,
+                        .data = buffer,
+                    };
 
-                String_View line = {0};
-                while (sv_try_chop_by_delim(&buffer_view, '\n', &line)) {
-                    line = sv_trim(line);
-                    log_info(&log, SV_Fmt, SV_Arg(line));
+                    String_View line = {0};
+                    while (sv_try_chop_by_delim(&buffer_view, '\n', &line)) {
+                        line = sv_trim(line);
+                        log_info(&log, SV_Fmt, SV_Arg(line));
 
-                    // Process the IRC messsage
-                    {
-                        if (sv_starts_with(line, SV(":"))) {
-                            String_View prefix = sv_chop_by_delim(&line, ' ');
-                            (void) prefix;
-                        }
-
-                        String_View irc_command = sv_chop_by_delim(&line, ' ');
-                        String_View irc_params = line;
-
-                        if (sv_eq(irc_command, SV("PING"))) {
-                            String_View param = {0};
-                            if (params_next(&irc_params, &param)) {
-                                irc_pong(&irc, param);
-                            } else {
-                                irc_pong(&irc, SV("tmi.twitch.tv"));
+                        // Process the IRC messsage
+                        {
+                            if (sv_starts_with(line, SV(":"))) {
+                                String_View prefix = sv_chop_by_delim(&line, ' ');
+                                (void) prefix;
                             }
-                        } else if (sv_eq(irc_command, SV("PRIVMSG"))) {
-                            String_View irc_channel = {0};
-                            params_next(&irc_params, &irc_channel);
 
-                            String_View message = {0};
-                            params_next(&irc_params, &message);
+                            String_View irc_command = sv_chop_by_delim(&line, ' ');
+                            String_View irc_params = line;
 
-                            // Handle user command
-                            {
-                                message = sv_trim_left(message);
-                                if (sv_starts_with(message, SV(CMD_PREFIX))) {
-                                    sv_chop_left(&message, 1);
+                            if (sv_eq(irc_command, SV("PING"))) {
+                                String_View param = {0};
+                                if (params_next(&irc_params, &param)) {
+                                    irc_pong(&irc, param);
+                                } else {
+                                    irc_pong(&irc, SV("tmi.twitch.tv"));
+                                }
+                            } else if (sv_eq(irc_command, SV("PRIVMSG"))) {
+                                String_View irc_channel = {0};
+                                params_next(&irc_params, &irc_channel);
+
+                                String_View message = {0};
+                                params_next(&irc_params, &message);
+
+                                // Handle user command
+                                {
                                     message = sv_trim_left(message);
-                                    String_View cmd_name = sv_trim(sv_chop_by_delim(&message, ' '));
-                                    String_View cmd_args = message;
+                                    if (sv_starts_with(message, SV(CMD_PREFIX))) {
+                                        sv_chop_left(&message, 1);
+                                        message = sv_trim_left(message);
+                                        String_View cmd_name = sv_trim(sv_chop_by_delim(&message, ' '));
+                                        String_View cmd_args = message;
 
-                                    Cmd_Run cmd_run = find_cmd_by_name(cmd_name);
-                                    if (cmd_run) {
-                                        cmd_run(&irc, &log, curl, cmd_region, irc_channel, cmd_args);
-                                        region_clean(cmd_region);
-                                    } else {
-                                        log_warning(&log, "Could not find command `"SV_Fmt"`", SV_Arg(cmd_name));
+                                        Cmd_Run cmd_run = find_cmd_by_name(cmd_name);
+                                        if (cmd_run) {
+                                            cmd_run(&irc, &log, curl, cmd_region, irc_channel, cmd_args);
+                                            region_clean(cmd_region);
+                                        } else {
+                                            log_warning(&log, "Could not find command `"SV_Fmt"`", SV_Arg(cmd_name));
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
 
-                if (buffer_view.count == sizeof(buffer)) {
-                    // NOTE: if after filling up the buffer completely we still
-                    // could not process any valid IRC messages, we assume that server
-                    // sent garbage and dropping it.
-                    buffer_drops_count += 1;
-                    log_warning(&log, "[%zu/%zu] Server sent garbage.",
-                                buffer_drops_count, (size_t) BUFFER_DROPS_THRESHOLD);
-                    buffer_size = 0;
-                } else {
-                    memmove(buffer, buffer_view.data, buffer_view.count);
-                    buffer_size = buffer_view.count;
-                    buffer_drops_count = 0;
+                    if (buffer_view.count == sizeof(buffer)) {
+                        // NOTE: if after filling up the buffer completely we still
+                        // could not process any valid IRC messages, we assume that server
+                        // sent garbage and dropping it.
+                        buffer_drops_count += 1;
+                        log_warning(&log, "[%zu/%zu] Server sent garbage.",
+                                    buffer_drops_count, (size_t) BUFFER_DROPS_THRESHOLD);
+                        buffer_size = 0;
+                    } else {
+                        memmove(buffer, buffer_view.data, buffer_view.count);
+                        buffer_size = buffer_view.count;
+                        buffer_drops_count = 0;
+                    }
                 }
             }
 
-            read_size = SSL_read(irc.ssl, buffer + buffer_size, sizeof(buffer) - buffer_size);
+            read_size = irc_read(&irc, buffer + buffer_size, sizeof(buffer) - buffer_size);
         }
 
         if (buffer_drops_count >= BUFFER_DROPS_THRESHOLD) {
@@ -314,9 +317,13 @@ int main(int argc, char **argv)
         }
 
         if (read_size <= 0) {
-            char buf[512] = {0};
-            ERR_error_string_n(SSL_get_error(irc.ssl, read_size), buf, sizeof(buf));
-            log_error(&log, "SSL failed with error: %s", buf);
+            if (irc.ssl) {
+                char buf[512] = {0};
+                ERR_error_string_n(SSL_get_error(irc.ssl, read_size), buf, sizeof(buf));
+                log_error(&log, "SSL failed with error: %s", buf);
+            } else {
+                log_error(&log, "Plain connection failed with error: %s", strerror(errno));
+            }
             goto error;
         }
     }
