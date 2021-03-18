@@ -31,6 +31,15 @@ int irc_write(Irc *irc, const void *buf, size_t count)
     }
 }
 
+bool irc_read_again(Irc *irc, int ret)
+{
+    if (irc->ssl) {
+        return SSL_get_error(irc->ssl, ret) == SSL_ERROR_WANT_READ;
+    } else {
+        return errno == EAGAIN || errno == EWOULDBLOCK;
+    }
+}
+
 void irc_write_cstr(Irc *irc, const char *cstr)
 {
     irc_write(irc, cstr, strlen(cstr));
@@ -41,7 +50,9 @@ void irc_write_sv(Irc *irc, String_View sv)
     irc_write(irc, sv.data, sv.count);
 }
 
-bool irc_connect_plain(Log *log, Irc *irc, const char *host, const char *service)
+bool irc_connect_plain(Log *log, Irc *irc,
+                       const char *host, const char *service,
+                       bool nonblocking)
 {
     irc_destroy(irc);
 
@@ -83,23 +94,22 @@ bool irc_connect_plain(Log *log, Irc *irc, const char *host, const char *service
         goto error;
     }
 
-    // Mark it as non-blocking
-    // {
-    //     int flag = fcntl(irc->sd, F_GETFD);
-    //     if (flag < 0) {
-    //         log_error(log, "Could not get flags of socket: %s\n",
-    //                   strerror(errno));
-    //         goto error;
-    //     }
+    if (nonblocking) {
+        int flag = fcntl(irc->sd, F_GETFL);
+        if (flag < 0) {
+            log_error(log, "Could not get flags of socket: %s\n",
+                      strerror(errno));
+            goto error;
+        }
 
-    //     if (fcntl(irc->sd, F_SETFD, flag | O_NONBLOCK) < 0) {
-    //         log_error(log, "Could not make the socket non-blocking: %s\n",
-    //                   strerror(errno));
-    //         goto error;
-    //     }
+        if (fcntl(irc->sd, F_SETFL, flag | O_NONBLOCK) < 0) {
+            log_error(log, "Could not make the socket non-blocking: %s\n",
+                      strerror(errno));
+            goto error;
+        }
 
-    //     log_info(log, "Marked the socket as non-blocking");
-    // }
+        log_info(log, "Marked the socket as non-blocking");
+    }
 
     if (addrs) {
         freeaddrinfo(addrs);
@@ -114,9 +124,11 @@ error:
     return false;
 }
 
-bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx, const char *host, const char *service)
+bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
+                        const char *host, const char *service,
+                        bool nonblocking)
 {
-    irc_connect_plain(log, irc, host, service);
+    irc_connect_plain(log, irc, host, service, false);
 
     // Upgrade to SSL connection
     {
@@ -133,6 +145,25 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx, const char *host, cons
             log_error(log, "Could not connect via SSL: %s", buf);
             goto error;
         }
+
+    }
+
+    // Mark it as non-blocking
+    if (nonblocking) {
+        int flag = fcntl(irc->sd, F_GETFL);
+        if (flag < 0) {
+            log_error(log, "Could not get flags of socket: %s\n",
+                      strerror(errno));
+            goto error;
+        }
+
+        if (fcntl(irc->sd, F_SETFL, flag | O_NONBLOCK) < 0) {
+            log_error(log, "Could not make the socket non-blocking: %s\n",
+                      strerror(errno));
+            goto error;
+        }
+
+        log_info(log, "Marked the socket as non-blocking");
     }
 
     return true;
