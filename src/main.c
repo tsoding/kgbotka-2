@@ -133,6 +133,14 @@ int main(int argc, char **argv)
                 } else if (sv_eq(key, SV("password"))) {
                     secret_password = value;
                 } else if (sv_eq(key, SV("channel"))) {
+                    switch(value.data[0]) {
+                    case '#':
+                    case '&':
+                        break;
+                    default:
+                        log_error(&log, "`channel` must start with a '#' or '&' character");
+                        goto error;
+                    }
                     secret_channel = value;
                 } else {
                     log_error(&log, "unknown key `"SV_Fmt"`", SV_Arg(key));
