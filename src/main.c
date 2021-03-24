@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <signal.h>
 
 #include <curl/curl.h>
 
@@ -18,6 +19,15 @@
 #define HOST "irc.chat.twitch.tv"
 #define SECURE_PORT "6697"
 #define PLAIN_PORT "6667"
+
+volatile sig_atomic_t sigint = 0;
+
+void sig_handler(int signo)
+{
+    if (signo == SIGINT) {
+        sigint = 1;
+    }
+}
 
 char *slurp_file(const char *file_path)
 {
@@ -88,8 +98,11 @@ int main(int argc, char **argv)
 {
     Log log = log_to_handle(stdout);
 
+    if (signal(SIGINT, sig_handler) == SIG_ERR) {
+        log_warning(&log, "can't catch SIGINT: %s", strerror(errno));
+    }
+
     // Resource to destroy at the end
-    // TODO: handle POSIX signals to finalize the resource properly
     bool curl_global_initalized = false;
     CURL *curl = NULL;
     char *secret_conf_content = NULL;
@@ -240,6 +253,9 @@ int main(int argc, char **argv)
         size_t buffer_drops_count = 0;
         while ((read_size > 0 || irc_read_again(&irc, read_size)) &&
                 buffer_drops_count < BUFFER_DROPS_THRESHOLD) {
+            if (sigint) {
+                goto error;
+            }
             if (read_size > 0) {
                 buffer_size += read_size;
 
