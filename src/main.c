@@ -20,6 +20,7 @@
 #define SECURE_PORT "6697"
 #define PLAIN_PORT "6667"
 
+// http://www.iso-9899.info/n1570.html#5.1.2.3p5
 volatile sig_atomic_t sigint = 0;
 
 void sig_handler(int signo)
@@ -99,7 +100,8 @@ int main(int argc, char **argv)
     Log log = log_to_handle(stdout);
 
     if (signal(SIGINT, sig_handler) == SIG_ERR) {
-        log_warning(&log, "can't catch SIGINT: %s", strerror(errno));
+        log_warning(&log, "Could not setup signal handler for SIGINT: %s",
+                    strerror(errno));
     }
 
     // Resource to destroy at the end
@@ -254,6 +256,7 @@ int main(int argc, char **argv)
         while ((read_size > 0 || irc_read_again(&irc, read_size)) &&
                 buffer_drops_count < BUFFER_DROPS_THRESHOLD) {
             if (sigint) {
+                log_warning(&log, "Interrupted by the user");
                 goto error;
             }
             if (read_size > 0) {
