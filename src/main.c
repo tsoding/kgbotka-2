@@ -238,9 +238,9 @@ int main(int argc, char **argv)
 
         log_info(&log, "Connected to Twitch IRC successfully");
 
-        // TODO: no support for Twitch IRC tags
         irc_pass(&irc, secret_password);
         irc_nick(&irc, secret_nickname);
+        irc_tags(&irc, SV("CAP REQ :twitch.tv/tags"));
         irc_join(&irc, secret_channel);
     }
 
@@ -275,6 +275,10 @@ int main(int argc, char **argv)
 
                         // Process the IRC messsage
                         {
+                            if (sv_starts_with(line, SV("@"))) {
+                                String_View tags = sv_chop_by_delim(&line, ' ');
+                                (void) tags;
+                            }
                             if (sv_starts_with(line, SV(":"))) {
                                 String_View prefix = sv_chop_by_delim(&line, ' ');
                                 (void) prefix;

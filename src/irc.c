@@ -222,6 +222,12 @@ void irc_pong(Irc *irc, String_View response)
     irc_write_sv(irc, response);
 }
 
+void irc_tags(Irc *irc, String_View request)
+{
+    irc_write_sv(irc, request);
+    irc_write_cstr(irc, "\n");
+}
+
 bool params_next(String_View *params, String_View *output)
 {
     assert(params);
