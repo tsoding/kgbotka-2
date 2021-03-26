@@ -220,6 +220,7 @@ void irc_pong(Irc *irc, String_View response)
 {
     irc_write_cstr(irc, "PONG :");
     irc_write_sv(irc, response);
+    irc_write_cstr(irc, "\n");
 }
 
 void irc_tags(Irc *irc, String_View request)
