@@ -223,9 +223,10 @@ void irc_pong(Irc *irc, String_View response)
     irc_write_cstr(irc, "\n");
 }
 
-void irc_tags(Irc *irc, String_View request)
+void irc_cap_req(Irc *irc, String_View capabilities)
 {
-    irc_write_sv(irc, request);
+    irc_write_cstr(irc, "CAP REQ :");
+    irc_write_sv(irc, capabilities);
     irc_write_cstr(irc, "\n");
 }
 

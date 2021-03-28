@@ -240,7 +240,7 @@ int main(int argc, char **argv)
 
         irc_pass(&irc, secret_password);
         irc_nick(&irc, secret_nickname);
-        irc_tags(&irc, SV("CAP REQ :twitch.tv/tags"));
+        irc_cap_req(&irc, SV("twitch.tv/tags"));
         irc_join(&irc, secret_channel);
     }
 
