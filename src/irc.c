@@ -220,6 +220,14 @@ void irc_pong(Irc *irc, String_View response)
 {
     irc_write_cstr(irc, "PONG :");
     irc_write_sv(irc, response);
+    irc_write_cstr(irc, "\n");
+}
+
+void irc_cap_req(Irc *irc, String_View capabilities)
+{
+    irc_write_cstr(irc, "CAP REQ :");
+    irc_write_sv(irc, capabilities);
+    irc_write_cstr(irc, "\n");
 }
 
 bool params_next(String_View *params, String_View *output)
