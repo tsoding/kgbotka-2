@@ -206,9 +206,9 @@ int main(int argc, char **argv)
         ctx = SSL_CTX_new(TLS_client_method());
 
         if (ctx == NULL) {
-            // TODO: SSL_CTX_new error is not located in errno
-            log_error(&log, "Could not initialize the SSL context: %s",
-                      strerror(errno));
+            char buf[512] = {0};
+            ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
+            log_error(&log, "Could not initialize the SSL context: %s", buf);
             goto error;
         }
 
