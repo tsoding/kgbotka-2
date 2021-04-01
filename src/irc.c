@@ -78,7 +78,7 @@ bool irc_connect_plain(Log *log, Irc *irc,
 
     irc->sd = 0;
     for (struct addrinfo *addr = addrs; addr != NULL; addr = addr->ai_next) {
-        // TODO: don't recreate socket on each attempt
+        // TODO(#23): don't recreate socket on each attempt
         // Just create a single socket with the appropriate family and type
         // and keep using it.
         irc->sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
