@@ -136,10 +136,6 @@ bool irc_connect_plain(Log *log, Irc *irc,
     return true;
 error:
 
-#ifdef _WIN32
-    WSACleanup();
-#endif
-
     if (addrs) {
         freeaddrinfo(addrs);
     }
