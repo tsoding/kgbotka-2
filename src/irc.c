@@ -207,7 +207,12 @@ void irc_destroy(Irc *irc)
         irc->ssl = NULL;
     }
 
+#ifdef _WIN32
+    closesocket(irc->sd);
+    WSACleanup();
+#else
     close(irc->sd);
+#endif
     irc->sd = 0;
 }
 
