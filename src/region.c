@@ -82,3 +82,13 @@ String_View region_sv_concat(Region *region, ...)
         .data = buffer
     };
 }
+
+size_t write_to_region(char *data, size_t size, size_t nmemb, Region *region)
+{
+    void *dest = region_alloc(region, size * nmemb);
+    if (dest == NULL) {
+        return 0;
+    }
+    memcpy(dest, data, size * nmemb);
+    return nmemb;
+}

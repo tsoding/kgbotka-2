@@ -2,44 +2,9 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <string.h>
+
 #include "./cmd.h"
-
-char hex_char(char x)
-{
-    if (0 <= x && x < 10) return x + '0';
-    if (10 <= x && x < 16) return x - 10 + 'A';
-    return ')';
-}
-
-String_View url_encode(Region *memory, String_View sv)
-{
-    const size_t WIDTH = 3;
-    char *result = region_alloc(memory, sv.count * WIDTH);
-    if (result == NULL) {
-        return SV_NULL;
-    }
-
-    for (size_t i = 0; i < sv.count; ++i) {
-        result[i * WIDTH + 0] = '%';
-        result[i * WIDTH + 1] = hex_char(((sv.data[i]) >> 4) & 0xf);
-        result[i * WIDTH + 2] = hex_char((sv.data[i]) & 0xf);
-    }
-
-    return (String_View) {
-        .count = sv.count * WIDTH,
-        .data = result,
-    };
-}
-
-static size_t write_to_region(char *data, size_t size, size_t nmemb, Region *region)
-{
-    void *dest = region_alloc(region, size * nmemb);
-    if (dest == NULL) {
-        return 0;
-    }
-    memcpy(dest, data, size * nmemb);
-    return nmemb;
-}
+#include "./http.h"
 
 void cmd_ping(Irc *irc, Log *log, CURL *curl, Region *memory, String_View channel, String_View args)
 {
@@ -66,26 +31,15 @@ void cmd_wttr(Irc *irc, Log *log, CURL *curl, Region *memory, String_View channe
         return;
     }
 
-    size_t begin_size = memory->size;
-
     // TODO(#22): use asynchronous CURL
-    curl_easy_setopt(curl, CURLOPT_URL, wttr_url.data);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_to_region);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, memory);
-    CURLcode res = curl_easy_perform(curl);
+
+    String_View wttr = {0};
+
+    CURLcode res = curl_get(curl, wttr_url.data, memory, &wttr);
     if (res != CURLE_OK) {
-        log_error(log, "COMMAND: CURL GET query of "SV_Fmt" has failed failed: %s",
-                  SV_Arg(wttr_url),
-                  curl_easy_strerror(res));
+        log_error(log, "COMMAND: could not perform wttr query\n");
         return;
     }
-
-    assert(begin_size < memory->size);
-
-    String_View wttr = {
-        .count = memory->size - begin_size,
-        .data = memory->buffer + begin_size,
-    };
 
     irc_privmsg(irc, channel, wttr);
     log_info(log, "COMMAND: wttr handled successfully");
