@@ -11,7 +11,7 @@ $ ./build.sh
 $ ./kgbotka ./state/ ./path/to/secret.conf
 ```
 
-<!-- TODO: windows build is not documented -->
+<!-- TODO(#20): windows build is not documented -->
 
 ## secret.conf
 
