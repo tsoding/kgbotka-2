@@ -169,7 +169,7 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
 
     // Mark it as non-blocking
 #ifndef _WIN32
-    // TODO: nonblocking is not supported on windows
+    // TODO(#26): nonblocking is not supported on windows
     if (nonblocking) {
         int flag = fcntl(irc->sd, F_GETFL);
         if (flag < 0) {
