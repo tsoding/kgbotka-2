@@ -63,15 +63,6 @@ bool irc_connect_plain(Log *log, Irc *irc,
 {
     irc_destroy(irc);
 
-#ifdef _WIN32
-    WSADATA wsaData;
-    int i_res = WSAStartup(MAKEWORD(2,2), &wsaData);
-    if (i_res != 0) {
-        log_error(log, "WSAStartup failed with error: %d", i_res);
-        goto error;
-    }
-#endif
-
     // Resources to destroy at the end
     struct addrinfo *addrs = NULL;
 
@@ -169,6 +160,7 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
 
     // Mark it as non-blocking
 #ifndef _WIN32
+    // TODO: nonblocking is not supported on windows
     if (nonblocking) {
         int flag = fcntl(irc->sd, F_GETFL);
         if (flag < 0) {
@@ -205,7 +197,6 @@ void irc_destroy(Irc *irc)
 
 #ifdef _WIN32
     closesocket(irc->sd);
-    WSACleanup();
 #else
     close(irc->sd);
 #endif

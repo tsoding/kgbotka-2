@@ -111,6 +111,9 @@ int main(int argc, char **argv)
     Irc irc = {0};
     SSL_CTX *ctx = NULL;
     Region *cmd_region = NULL;
+#ifdef _WIN32
+    bool wsa_initialized = false;
+#endif
 
     // Secret configuration
     String_View secret_nickname = SV_NULL;
@@ -181,6 +184,19 @@ int main(int argc, char **argv)
 
         log_info(&log, "Parsed `%s` successfully", secret_conf_path);
     }
+
+#ifdef _WIN32
+    {
+        WSADATA wsaData;
+        int i_res = WSAStartup(MAKEWORD(2,2), &wsaData);
+        if (i_res != 0) {
+            log_error(log, "WSAStartup failed with error: %d", i_res);
+            goto error;
+        }
+
+        wsa_initialized = true;
+    }
+#endif
 
     // Initialize CURL
     {
@@ -382,6 +398,12 @@ int main(int argc, char **argv)
         if (cmd_region) {
             region_free(cmd_region);
         }
+
+#ifdef _WIN32
+        if (wsa_initialized) {
+            WSACleanup();
+        }
+#endif
     }
 
     return 0;
@@ -411,6 +433,12 @@ error:
         if (cmd_region) {
             region_free(cmd_region);
         }
+
+#ifdef _WIN32
+        if (wsa_initialized) {
+            WSACleanup();
+        }
+#endif
     }
 
     return -1;
