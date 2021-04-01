@@ -44,5 +44,40 @@ jobs:
           CC: clang
           CXX: clang++
           PKG_CONFIG_PATH: /usr/local/opt/openssl/lib/pkgconfig
-# TODO(#21): no CI for windows
+  build-windows-mingw-inside_msys2_shell:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: [
+          { msystem: MINGW64, msystem_lower: mingw64, arch: x86_64 }
+          ,{msystem: MINGW32, msystem_lower: mingw32, arch: i686   }
+        ]          
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          path: temp
+          fetch-depth: 0
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          install: mingw-w64-${{ matrix.arch }}-toolchain mingw-w64-${{ matrix.arch }}-pkg-config mingw-w64-${{ matrix.arch }}-brotli mingw-w64-${{ matrix.arch }}-curl
+          update: true
+      - name: Update and Install mingw and packages
+        run: |
+          msys2 -c 'pacman --noconfirm -Suuy'
+          msys2 -c 'pacman --noconfirm -Suu'
+# like https://github.com/msys2/MINGW-packages/blob/master/.github/workflows/main.yml#L35
+      - name: Move Checkout
+        run: |
+          Copy-Item -Path ".\temp" -Destination "C:\_" -Recurse
+      - name: Build
+        run: |
+          cd /C/_
+          MINGW_ARCH=${{ matrix.msystem }} ./build_msys2.sh
+        shell: msys2 {0}
+        env:
+          CC: gcc
+          CXX: g++
+# TODO(#21): no CI for windows::msvc
 # TODO(#25): no CI for freebsd
