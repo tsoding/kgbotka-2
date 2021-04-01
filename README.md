@@ -6,12 +6,33 @@ We depend on [OpenSSL](https://www.openssl.org/). Feel free to submit PRs to mak
 
 ## Quick Start
 
+`*NIX`:
 ```console
 $ ./build.sh
-$ ./kgbotka ./state/ ./path/to/secret.conf
+$ ./kgbotka ./path/to/secret.conf
 ```
 
-<!-- TODO(#20): windows build is not documented -->
+`Windows (Visual Studio)`:
+```
+> setup_msvc_deps.bat
+> build_msvc.bat
+> kgbotka.exe path/to/secret.conf
+```
+
+`Windows (MSYS2)`:
+
+MSYS2 mingw-w64 packages:
+
+```console
+$ pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-openssl mingw-w64-x86_64-curl 
+```
+
+Build:
+
+```regular windows console (cmd)
+> build_msys2.bat
+> kgbotka.exe path/to/secret.conf
+```
 
 ## secret.conf
 
