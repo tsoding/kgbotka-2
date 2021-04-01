@@ -44,5 +44,5 @@ jobs:
           CC: clang
           CXX: clang++
           PKG_CONFIG_PATH: /usr/local/opt/openssl/lib/pkgconfig
-# TODO: no CI for windows
+# TODO(#21): no CI for windows
 # TODO: no CI for freebsd
