@@ -132,11 +132,20 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
 
     // Upgrade to SSL connection
     {
-        // TODO: SSL_new() can fail
         irc->ssl = SSL_new(ctx);
+        if(!irc->ssl) {
+            char buf[512] = {0};
+            ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
+            log_error(log, "Could not create a SSL structure: %s", buf);
+            goto error;
+        }
 
-        // TODO: SSL_set_fd() can fail
-        SSL_set_fd(irc->ssl, irc->sd);
+        if (!SSL_set_fd(irc->ssl, irc->sd)) {
+            char buf[512] = {0};
+            ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
+            log_error(log, "Could not set the SSL file descriptor: %s", buf);
+            goto error;
+        }
 
         int ret = SSL_connect(irc->ssl);
         if (ret < 0) {
