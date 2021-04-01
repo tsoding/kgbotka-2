@@ -190,7 +190,7 @@ int main(int argc, char **argv)
         WSADATA wsaData;
         int i_res = WSAStartup(MAKEWORD(2,2), &wsaData);
         if (i_res != 0) {
-            log_error(log, "WSAStartup failed with error: %d", i_res);
+            log_error(&log, "WSAStartup failed with error: %d", i_res);
             goto error;
         }
 
