@@ -70,7 +70,7 @@ jobs:
 # like https://github.com/msys2/MINGW-packages/blob/master/.github/workflows/main.yml#L35
       - name: Move Checkout
         run: |
-          Copy-Item -Path ".\temp" -Destination "C:\_" -Recurse
+          Copy-Item -Path "." -Destination "C:\_" -Recurse
       - name: Build
         run: |
           cd /C/_
