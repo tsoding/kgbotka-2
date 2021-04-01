@@ -262,7 +262,7 @@ int main(int argc, char **argv)
 
     // IRC event loop
     {
-        // TODO: autoreconnect
+        // TODO(#24): autoreconnect
 #define BUFFER_DROPS_THRESHOLD 5
         char buffer[4096];
         size_t buffer_size = 0;
