@@ -1,14 +1,21 @@
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200112L
-
-#include <assert.h>
-#include <string.h>
-
 #include <netdb.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#else
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+
+#include <assert.h>
+#include <string.h>
+
+#include <sys/types.h>
 #include <fcntl.h>
 
 #include "./irc.h"
@@ -94,6 +101,7 @@ bool irc_connect_plain(Log *log, Irc *irc,
         goto error;
     }
 
+#ifndef _WIN32
     if (nonblocking) {
         int flag = fcntl(irc->sd, F_GETFL);
         if (flag < 0) {
@@ -110,6 +118,7 @@ bool irc_connect_plain(Log *log, Irc *irc,
 
         log_info(log, "Marked the socket as non-blocking");
     }
+#endif
 
     if (addrs) {
         freeaddrinfo(addrs);
@@ -117,6 +126,7 @@ bool irc_connect_plain(Log *log, Irc *irc,
 
     return true;
 error:
+
     if (addrs) {
         freeaddrinfo(addrs);
     }
@@ -158,6 +168,8 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
     }
 
     // Mark it as non-blocking
+#ifndef _WIN32
+    // TODO: nonblocking is not supported on windows
     if (nonblocking) {
         int flag = fcntl(irc->sd, F_GETFL);
         if (flag < 0) {
@@ -174,6 +186,7 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
 
         log_info(log, "Marked the socket as non-blocking");
     }
+#endif
 
     return true;
 error:
@@ -191,7 +204,11 @@ void irc_destroy(Irc *irc)
         irc->ssl = NULL;
     }
 
+#ifdef _WIN32
+    closesocket(irc->sd);
+#else
     close(irc->sd);
+#endif
     irc->sd = 0;
 }
 
