@@ -13,6 +13,7 @@
 #include "./irc.h"
 #include "./cmd.h"
 #include "./region.h"
+#include "./http.h"
 
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
@@ -93,6 +94,18 @@ char *shift(int *argc, char ***argv)
 void usage(const char *program, FILE *stream)
 {
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
+}
+
+void connect_discord(CURL *curl, Region *memory, Log *log)
+{
+    const char *url = "https://discord.com/api/gateway";
+    String_View res = {0};
+    if (curl_get(curl, url, memory, &res) != CURLE_OK) {
+        log_warning(log, "Could not retrieve Discord gateway");
+        return;
+    }
+
+    log_info(log, "Response from Discord: "SV_Fmt, SV_Arg(res));
 }
 
 int main(int argc, char **argv)
@@ -259,6 +272,9 @@ int main(int argc, char **argv)
         irc_cap_req(&irc, SV("twitch.tv/tags"));
         irc_join(&irc, secret_channel);
     }
+
+    // Connect to Discord
+    connect_discord(curl, cmd_region, &log);
 
     // IRC event loop
     {
