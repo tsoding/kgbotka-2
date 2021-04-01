@@ -68,7 +68,7 @@ void cmd_wttr(Irc *irc, Log *log, CURL *curl, Region *memory, String_View channe
 
     size_t begin_size = memory->size;
 
-    // TODO: use asynchronous CURL
+    // TODO(#22): use asynchronous CURL
     curl_easy_setopt(curl, CURLOPT_URL, wttr_url.data);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_to_region);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, memory);
