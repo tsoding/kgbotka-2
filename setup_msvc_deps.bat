@@ -37,7 +37,7 @@ cd perl/bin
 
 if not exist openssl-%OPENSSL_V%.tar.g curl -fsSL -o openssl-%OPENSSL_V%.tar.gz https://www.openssl.org/source/openssl-%OPENSSL_V%.tar.gz
 if not exist openssl-%OPENSSL_V% tar -xf openssl-%OPENSSL_V%.tar.gz
-robocopy openssl-%OPENSSL_V% . /E /MOVE
+robocopy openssl-%OPENSSL_V% . /E /MOVE /NP /NFL
 perl Configure VC-WIN64A no-shared
 nmake
 
@@ -59,7 +59,7 @@ goto :eof
 echo setting up pre-compiled libraries..
 
 if not exist deps-vc-win64-master tar -xf deps-vc-win64.zip
-robocopy deps-vc-win64-master vendor /E /MOVE
+robocopy deps-vc-win64-master vendor /E /MOVE /NP /NFL
 del deps-vc-win64.zip
 
 :eof
