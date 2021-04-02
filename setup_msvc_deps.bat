@@ -1,7 +1,5 @@
 @echo off
-rem run this from msvc-enabled console
-
-set CURL_V=7.76.0
+rem run this from msvc-enabled console (vcvarsall x64)
 
 mkdir vendor\curl
 mkdir vendor\openssl\lib
@@ -10,6 +8,8 @@ if not exist deps-vc-win64.zip curl -fsSL -o deps-vc-win64.zip https://github.co
 if exist deps-vc-win64.zip goto :setup_precompiled_libs
 
 echo downloading dependencies, building curl and openssl from source..
+
+set CURL_V=7.76.0
 
 if not exist curl-%CURL_V%.zip curl -fsSL -o curl-%CURL_V%.zip https://curl.se/download/curl-%CURL_V%.zip
 if not exist curl-%CURL_V% tar -xf curl-%CURL_V%.zip

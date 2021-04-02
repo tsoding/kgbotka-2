@@ -1,5 +1,5 @@
 @echo off
-rem run this from msvc-enabled console
+rem run this from msvc-enabled console (vcvarsall x64)
 
 if not exist msvc-build mkdir msvc-build
 
