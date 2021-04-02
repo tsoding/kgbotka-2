@@ -16,7 +16,6 @@ $ ./kgbotka ./path/to/secret.conf
 ```
 > setup_msvc_deps.bat
 > build_msvc.bat
-> cd msvc-build
 > kgbotka.exe path/to/secret.conf
 ```
 
