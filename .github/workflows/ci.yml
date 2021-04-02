@@ -44,5 +44,47 @@ jobs:
           CC: clang
           CXX: clang++
           PKG_CONFIG_PATH: /usr/local/opt/openssl/lib/pkgconfig
-# TODO(#21): no CI for windows
+  build-windows-msvc:
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v1
+        # this runs vcvarsall for us, so we get the MSVC toolchain in PATH.
+      - uses: seanmiddleditch/gha-setup-vsdevenv@master
+      - name: install dependencies
+        run: |
+          ./setup_msvc_deps.bat
+      - name: build kgbotka
+        shell: cmd
+        # this replaces default PowerShell, which can't fail the build
+        run: |
+          ./build_msvc.bat
+  build-windows-mingw-outside_msys2_shell:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: [
+          { msystem: MINGW64, msystem_lower: mingw64, arch: x86_64 }
+        ]          
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          path: temp
+          fetch-depth: 0
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          install: mingw-w64-${{ matrix.arch }}-gcc mingw-w64-${{ matrix.arch }}-openssl mingw-w64-${{ matrix.arch }}-curl
+          update: true
+      - name: update pkgs
+        run: |
+          msys2 -c 'pacman --noconfirm -Suuy'
+          msys2 -c 'pacman --noconfirm -Suu'
+      - name: build kgbotka
+        run: |
+          build_msys2.bat
+        shell: cmd
+        env:
+          CC: gcc
+          PATH: D:\a\_temp\msys\msys64\usr\bin;D:\a\_temp\msys\msys64\${{ matrix.msystem_lower }}\bin;D:\a\_temp\msys
 # TODO(#25): no CI for freebsd
