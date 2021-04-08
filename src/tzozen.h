@@ -125,8 +125,7 @@ TZOZENDEF int64_t json_number_to_integer(Json_Number number);
 
 struct Json_Value {
     Json_Type type;
-    union
-    {
+    union {
         int boolean;
         Json_Number number;
         Tzozen_Str string;
@@ -210,7 +209,7 @@ TZOZENDEF Tzozen_Memory tzozen_memory(uint8_t *buffer, size_t capacity)
 TZOZENDEF void *memory_alloc(Tzozen_Memory *memory, size_t size)
 {
     assert(memory);
-    
+
     if (memory->size + size > memory->capacity) {
         return NULL;
     }
@@ -293,12 +292,18 @@ TZOZENDEF void tzozen_str_chop(Tzozen_Str *s, size_t n)
 TZOZENDEF const char *json_type_as_cstr(Json_Type type)
 {
     switch (type) {
-    case JSON_NULL: return "JSON_NULL";
-    case JSON_BOOLEAN: return "JSON_BOOLEAN";
-    case JSON_NUMBER: return "JSON_NUMBER";
-    case JSON_STRING: return "JSON_STRING";
-    case JSON_ARRAY: return "JSON_ARRAY";
-    case JSON_OBJECT: return "JSON_OBJECT";
+    case JSON_NULL:
+        return "JSON_NULL";
+    case JSON_BOOLEAN:
+        return "JSON_BOOLEAN";
+    case JSON_NUMBER:
+        return "JSON_NUMBER";
+    case JSON_STRING:
+        return "JSON_STRING";
+    case JSON_ARRAY:
+        return "JSON_ARRAY";
+    case JSON_OBJECT:
+        return "JSON_OBJECT";
     }
 
     assert(0 && "Incorrect Json_Type");
@@ -530,8 +535,8 @@ TZOZENDEF Json_Result result_failure(Tzozen_Str rest, const char *message)
 }
 
 TZOZENDEF Json_Result parse_token(Tzozen_Str source, Tzozen_Str token,
-                        Json_Value value,
-                        const char *message)
+                                  Json_Value value,
+                                  const char *message)
 {
     if (tzozen_str_equal(tzozen_str_take(source, token.len), token)) {
         return result_success(tzozen_str_drop(source, token.len), value);
@@ -575,9 +580,9 @@ TZOZENDEF Json_Result parse_json_number(Tzozen_Memory *memory, Tzozen_Str source
 
     // TODO: empty integer with fraction is not taken into account
     if (integer.len == 0
-        || tzozen_str_equal(integer, TSTR("-"))
-        || (integer.len > 1 && *integer.data == '0')
-        || (integer.len > 2 && tzozen_str_prefix_of(TSTR("-0"), integer))) {
+            || tzozen_str_equal(integer, TSTR("-"))
+            || (integer.len > 1 && *integer.data == '0')
+            || (integer.len > 2 && tzozen_str_prefix_of(TSTR("-0"), integer))) {
         return result_failure(source, "Incorrect number literal");
     }
 
@@ -611,33 +616,33 @@ TZOZENDEF Json_Result parse_json_number(Tzozen_Memory *memory, Tzozen_Str source
         }
 
         if (exponent.len == 0 ||
-            tzozen_str_equal(exponent, TSTR("-")) ||
-            tzozen_str_equal(exponent, TSTR("+"))) {
+                tzozen_str_equal(exponent, TSTR("-")) ||
+                tzozen_str_equal(exponent, TSTR("+"))) {
             return result_failure(source, "Incorrect number literal");
         }
     }
 
     Tzozen_Str integer_clone = {0, NULL};
-    if (tzozen_str_clone(memory, integer, &integer_clone) < 0){
+    if (tzozen_str_clone(memory, integer, &integer_clone) < 0) {
         return result_failure(source, "Out of memory");
     }
 
     Tzozen_Str fraction_clone = {0, NULL};
-    if (tzozen_str_clone(memory, fraction, &fraction_clone) < 0){
+    if (tzozen_str_clone(memory, fraction, &fraction_clone) < 0) {
         return result_failure(source, "Out of memory");
     }
 
     Tzozen_Str exponent_clone = {0, NULL};
-    if (tzozen_str_clone(memory, exponent, &exponent_clone) < 0){
+    if (tzozen_str_clone(memory, exponent, &exponent_clone) < 0) {
         return result_failure(source, "Out of memory");
     }
 
     return result_success(
-        source,
-        json_number(
-            integer_clone,
-            fraction_clone,
-            exponent_clone));
+               source,
+               json_number(
+                   integer_clone,
+                   fraction_clone,
+                   exponent_clone));
 }
 
 TZOZENDEF Json_Result parse_json_string_literal(Tzozen_Str source)
@@ -997,12 +1002,18 @@ TZOZENDEF Json_Result parse_json_value_with_depth(Tzozen_Memory *memory, Tzozen_
     }
 
     switch (*source.data) {
-    case 'n': return parse_token(source, TSTR("null"), json_null(), "Expected `null`");
-    case 't': return parse_token(source, TSTR("true"), json_true(), "Expected `true`");
-    case 'f': return parse_token(source, TSTR("false"), json_false(), "Expected `false`");
-    case '"': return parse_json_string(memory, source);
-    case '[': return parse_json_array(memory, source, level);
-    case '{': return parse_json_object(memory, source, level);
+    case 'n':
+        return parse_token(source, TSTR("null"), json_null(), "Expected `null`");
+    case 't':
+        return parse_token(source, TSTR("true"), json_true(), "Expected `true`");
+    case 'f':
+        return parse_token(source, TSTR("false"), json_false(), "Expected `false`");
+    case '"':
+        return parse_json_string(memory, source);
+    case '[':
+        return parse_json_array(memory, source, level);
+    case '{':
+        return parse_json_object(memory, source, level);
     }
 
     return parse_json_number(memory, source);
@@ -1111,22 +1122,28 @@ TZOZENDEF void print_json_value(FILE *stream, Json_Value value)
     switch (value.type) {
     case JSON_NULL: {
         print_json_null(stream);
-    } break;
+    }
+    break;
     case JSON_BOOLEAN: {
         print_json_boolean(stream, value.boolean);
-    } break;
+    }
+    break;
     case JSON_NUMBER: {
         print_json_number(stream, value.number);
-    } break;
+    }
+    break;
     case JSON_STRING: {
         print_json_string(stream, value.string);
-    } break;
+    }
+    break;
     case JSON_ARRAY: {
         print_json_array(stream, value.array);
-    } break;
+    }
+    break;
     case JSON_OBJECT: {
         print_json_object(stream, value.object);
-    } break;
+    }
+    break;
     }
 }
 
@@ -1169,12 +1186,12 @@ TZOZENDEF int json_get_utf8_char_len(unsigned char ch)
 {
     if ((ch & 0x80) == 0) return 1;
     switch (ch & 0xf0) {
-        case 0xf0:
-            return 4;
-        case 0xe0:
-            return 3;
-        default:
-            return 2;
+    case 0xf0:
+        return 4;
+    case 0xe0:
+        return 3;
+    default:
+        return 2;
     }
 }
 
