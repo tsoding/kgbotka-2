@@ -35,6 +35,7 @@ bool sv_try_chop_by_delim(String_View *sv, char delim, String_View *result);
 String_View sv_chop_left(String_View *sv, size_t n);
 String_View sv_chop_right(String_View *sv, size_t n);
 String_View sv_chop_left_while(String_View *sv, bool (*predicate)(char x));
+bool sv_cut_prefix(String_View *sv, String_View prefix);
 bool sv_index_of(String_View sv, char c, size_t *index);
 bool sv_eq(String_View a, String_View b);
 bool sv_starts_with(String_View sv, String_View prefix);

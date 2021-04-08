@@ -196,3 +196,13 @@ Tzozen_Str sv_to_tzozen_str(String_View sv)
 {
     return tzozen_str(sv.count, sv.data);
 }
+
+bool sv_cut_prefix(String_View *sv, String_View prefix)
+{
+    if (sv_starts_with(*sv, prefix)) {
+        sv_chop_left(sv, prefix.count);
+        return true;
+    }
+
+    return false;
+}
