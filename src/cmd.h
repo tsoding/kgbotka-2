@@ -8,7 +8,7 @@
 #include "./sv.h"
 #include "./region.h"
 
-#define CMD_PREFIX "%"
+#define CMD_PREFIX "^"
 
 typedef void (*Cmd_Run)(Irc *irc, Log *log, CURL *curl, Region *memory, String_View channel, String_View args);
 Cmd_Run find_cmd_by_name(String_View name);
