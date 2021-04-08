@@ -19,6 +19,7 @@
 #include <fcntl.h>
 
 #include "./irc.h"
+#include "./net.h"
 
 int irc_read(Irc *irc, void *buf, size_t count)
 {
@@ -63,80 +64,14 @@ bool irc_connect_plain(Log *log, Irc *irc,
 {
     irc_destroy(irc);
 
-    // Resources to destroy at the end
-    struct addrinfo *addrs = NULL;
-
-    struct addrinfo hints = {0};
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    if (getaddrinfo(host, service, &hints, &addrs) < 0) {
-        log_error(log, "Could not get address of `%s`: %s", host, strerror(errno));
+    irc->sd = net_connect_plain(log, host, service, nonblocking);
+    if (irc->sd < 0) {
         goto error;
-    }
-
-    irc->sd = 0;
-    for (struct addrinfo *addr = addrs; addr != NULL; addr = addr->ai_next) {
-        // TODO(#23): don't recreate socket on each attempt
-        // Just create a single socket with the appropriate family and type
-        // and keep using it.
-        irc->sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-
-        if (irc->sd == -1) {
-            break;
-        }
-
-        if (connect(irc->sd, addr->ai_addr, addr->ai_addrlen) == 0) {
-            break;
-        }
-
-        close(irc->sd);
-        irc->sd = -1;
-    }
-
-    if (irc->sd == -1) {
-        log_error(log, "Could not connect to %s:%s: %s",
-                  host, service, strerror(errno));
-        goto error;
-    }
-
-    if (nonblocking) {
-#ifndef _WIN32
-        int flag = fcntl(irc->sd, F_GETFL);
-        if (flag < 0) {
-            log_error(log, "Could not get flags of socket: %s\n",
-                      strerror(errno));
-            goto error;
-        }
-
-        if (fcntl(irc->sd, F_SETFL, flag | O_NONBLOCK) < 0) {
-            log_error(log, "Could not make the socket non-blocking: %s\n",
-                      strerror(errno));
-            goto error;
-        }
-#else
-        u_long mode = 1;
-        int i_res = ioctlsocket(irc->sd, FIONBIO, &mode);
-        if (i_res != NO_ERROR) {
-            log_error(log, "Could not make the socket non-blocking: %d", i_res);
-            goto error;
-        }
-#endif
-        log_info(log, "Marked the socket as non-blocking");
-    }
-
-    if (addrs) {
-        freeaddrinfo(addrs);
     }
 
     return true;
 error:
-
-    if (addrs) {
-        freeaddrinfo(addrs);
-    }
-
+    irc_destroy(irc);
     return false;
 }
 
@@ -144,65 +79,21 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
                         const char *host, const char *service,
                         bool nonblocking)
 {
-    irc_connect_plain(log, irc, host, service, false);
+    irc_destroy(irc);
 
-    // Upgrade to SSL connection
-    {
-        irc->ssl = SSL_new(ctx);
-        if(!irc->ssl) {
-            char buf[512] = {0};
-            ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
-            log_error(log, "Could not create a SSL structure: %s", buf);
-            goto error;
-        }
-
-        if (!SSL_set_fd(irc->ssl, irc->sd)) {
-            char buf[512] = {0};
-            ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
-            log_error(log, "Could not set the SSL file descriptor: %s", buf);
-            goto error;
-        }
-
-        int ret = SSL_connect(irc->ssl);
-        if (ret < 0) {
-            char buf[512] = {0};
-            ERR_error_string_n(SSL_get_error(irc->ssl, ret), buf, sizeof(buf));
-            log_error(log, "Could not connect via SSL: %s", buf);
-            goto error;
-        }
-
+    irc->sd = net_connect_plain(log, host, service, false);
+    if (irc->sd < 0) {
+        goto error;
     }
 
-    // Mark it as non-blocking
-    if (nonblocking) {
-#ifndef _WIN32
-        int flag = fcntl(irc->sd, F_GETFL);
-        if (flag < 0) {
-            log_error(log, "Could not get flags of socket: %s\n",
-                      strerror(errno));
-            goto error;
-        }
-
-        if (fcntl(irc->sd, F_SETFL, flag | O_NONBLOCK) < 0) {
-            log_error(log, "Could not make the socket non-blocking: %s\n",
-                      strerror(errno));
-            goto error;
-        }
-#else
-        u_long mode = 1;
-        int i_res = ioctlsocket(irc->sd, FIONBIO, &mode);
-        if (i_res != NO_ERROR) {
-            log_error(log, "Could not make the socket non-blocking: %d", i_res);
-            goto error;
-        }
-#endif
-        log_info(log, "Marked the socket as non-blocking");
+    irc->ssl = net_upgrade_to_secure(log, irc->sd, ctx, nonblocking);
+    if (irc->ssl == NULL) {
+        goto error;
     }
 
     return true;
 error:
     irc_destroy(irc);
-
     return false;
 }
 

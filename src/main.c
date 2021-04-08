@@ -13,6 +13,11 @@
 #include "./irc.h"
 #include "./cmd.h"
 #include "./region.h"
+#include "./http.h"
+#include "./discord.h"
+
+#define TZOZEN_IMPLEMENTATION
+#include "./tzozen.h"
 
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
@@ -93,6 +98,25 @@ char *shift(int *argc, char ***argv)
 void usage(const char *program, FILE *stream)
 {
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
+}
+
+
+void connect_discord(CURL *curl, Region *memory, Log *log)
+{
+    const char *url = "https://discord.com/api/gateway";
+    Json_Value body = {0};
+    if (!curl_get_json(curl, url, memory, &body)) {
+        log_error(log, "Could not retrieve Discord gateway");
+        return;
+    }
+
+    String_View gateway_url = {0};
+    if (!extract_discord_gateway_url(body, &gateway_url)) {
+        log_error(log, "Could not extract discord gateway url from the JSON.");
+        return;
+    }
+
+    log_info(log, "Discord gateway url: "SV_Fmt, SV_Arg(gateway_url));
 }
 
 int main(int argc, char **argv)
@@ -259,6 +283,9 @@ int main(int argc, char **argv)
         irc_cap_req(&irc, SV("twitch.tv/tags"));
         irc_join(&irc, secret_channel);
     }
+
+    // Connect to Discord
+    connect_discord(curl, cmd_region, &log);
 
     // IRC event loop
     {
