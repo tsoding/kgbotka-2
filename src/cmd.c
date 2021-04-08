@@ -35,8 +35,7 @@ void cmd_wttr(Irc *irc, Log *log, CURL *curl, Region *memory, String_View channe
 
     String_View wttr = {0};
 
-    CURLcode res = curl_get(curl, wttr_url.data, memory, &wttr);
-    if (res != CURLE_OK) {
+    if (!curl_get(curl, wttr_url.data, memory, &wttr)) {
         log_error(log, "COMMAND: could not perform wttr query\n");
         return;
     }
