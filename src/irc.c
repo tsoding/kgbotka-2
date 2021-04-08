@@ -101,8 +101,8 @@ bool irc_connect_plain(Log *log, Irc *irc,
         goto error;
     }
 
-#ifndef _WIN32
     if (nonblocking) {
+#ifndef _WIN32
         int flag = fcntl(irc->sd, F_GETFL);
         if (flag < 0) {
             log_error(log, "Could not get flags of socket: %s\n",
@@ -115,10 +115,16 @@ bool irc_connect_plain(Log *log, Irc *irc,
                       strerror(errno));
             goto error;
         }
-
+#else
+        u_long mode = 1;
+        int i_res = ioctlsocket(irc->sd, FIONBIO, &mode);
+        if (i_res != NO_ERROR) {
+            log_error(log, "Could not make the socket non-blocking: %d", i_res);
+            goto error;
+        }
+#endif
         log_info(log, "Marked the socket as non-blocking");
     }
-#endif
 
     if (addrs) {
         freeaddrinfo(addrs);
@@ -168,9 +174,8 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
     }
 
     // Mark it as non-blocking
-#ifndef _WIN32
-    // TODO(#26): nonblocking is not supported on windows
     if (nonblocking) {
+#ifndef _WIN32
         int flag = fcntl(irc->sd, F_GETFL);
         if (flag < 0) {
             log_error(log, "Could not get flags of socket: %s\n",
@@ -183,10 +188,16 @@ bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
                       strerror(errno));
             goto error;
         }
-
+#else
+        u_long mode = 1;
+        int i_res = ioctlsocket(irc->sd, FIONBIO, &mode);
+        if (i_res != NO_ERROR) {
+            log_error(log, "Could not make the socket non-blocking: %d", i_res);
+            goto error;
+        }
+#endif
         log_info(log, "Marked the socket as non-blocking");
     }
-#endif
 
     return true;
 error:
