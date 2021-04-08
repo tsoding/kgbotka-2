@@ -44,5 +44,18 @@ jobs:
           CC: clang
           CXX: clang++
           PKG_CONFIG_PATH: /usr/local/opt/openssl/lib/pkgconfig
-# TODO(#21): no CI for windows
+  build-windows-msvc:
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v1
+        # this runs vcvarsall for us, so we get the MSVC toolchain in PATH.
+      - uses: seanmiddleditch/gha-setup-vsdevenv@master
+      - name: install dependencies
+        run: |
+          ./setup_msvc_deps.bat
+      - name: build kgbotka
+        shell: cmd
+        # this replaces default PowerShell, which can't fail the build
+        run: |
+          ./build_msvc.bat
 # TODO(#25): no CI for freebsd
