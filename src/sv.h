@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include "./tzozen.h"
 
 typedef struct {
     size_t count;
@@ -39,5 +40,7 @@ bool sv_eq(String_View a, String_View b);
 bool sv_starts_with(String_View sv, String_View prefix);
 bool sv_ends_with(String_View sv, String_View suffix);
 uint64_t sv_to_u64(String_View sv);
+
+Tzozen_Str sv_to_tzozen_str(String_View sv);
 
 #endif  // SV_H_

@@ -14,6 +14,10 @@
 #include "./cmd.h"
 #include "./region.h"
 #include "./http.h"
+#include "./discord.h"
+
+#define TZOZEN_IMPLEMENTATION
+#include "./tzozen.h"
 
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
@@ -96,16 +100,23 @@ void usage(const char *program, FILE *stream)
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
 }
 
+
 void connect_discord(CURL *curl, Region *memory, Log *log)
 {
     const char *url = "https://discord.com/api/gateway";
-    String_View res = {0};
-    if (curl_get(curl, url, memory, &res) != CURLE_OK) {
-        log_warning(log, "Could not retrieve Discord gateway");
+    Json_Value body = {0};
+    if (!curl_get_json(curl, url, memory, &body)) {
+        log_error(log, "Could not retrieve Discord gateway");
         return;
     }
 
-    log_info(log, "Response from Discord: "SV_Fmt, SV_Arg(res));
+    String_View gateway_url = {0};
+    if (!extract_discord_gateway_url(body, &gateway_url)) {
+        log_error(log, "Could not extract discord gateway url from the JSON.");
+        return;
+    }
+
+    log_info(log, "Discord gateway url: "SV_Fmt, SV_Arg(gateway_url));
 }
 
 int main(int argc, char **argv)

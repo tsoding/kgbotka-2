@@ -1,6 +1,6 @@
 #include "./http.h"
 
-CURLcode curl_get(CURL *curl, const char *url, Region *memory, String_View *body)
+bool curl_get(CURL *curl, const char *url, Region *memory, String_View *body)
 {
     size_t begin_size = memory->size;
 
@@ -13,7 +13,36 @@ CURLcode curl_get(CURL *curl, const char *url, Region *memory, String_View *body
         body->count = memory->size - begin_size;
         body->data = memory->buffer + begin_size;
     }
-    return res;
+
+    if (res != CURLE_OK) {
+        // TODO: specific curl error should be logged in curl_get()
+        return false;
+    }
+
+    return true;
+}
+
+bool curl_get_json(CURL *curl, const char *url, Region *memory, Json_Value *body)
+{
+    String_View raw_body = {0};
+    if (!curl_get(curl, url, memory, &raw_body)) {
+        return false;
+    }
+
+    Tzozen_Memory tmemory = region_to_tzozen_memory(memory);
+    Json_Result result = parse_json_value(&tmemory, sv_to_tzozen_str(raw_body));
+    memory->size = tmemory.size;
+
+    if (result.is_error) {
+        // TODO: specific JSON parsing error should be logged in curl_get_json()
+        return false;
+    }
+
+    if (body) {
+        *body = result.value;
+    }
+
+    return true;
 }
 
 static char hex_char(char x)

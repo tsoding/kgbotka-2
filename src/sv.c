@@ -191,3 +191,8 @@ bool sv_try_chop_by_delim(String_View *sv, char delim, String_View *result)
 
     return false;
 }
+
+Tzozen_Str sv_to_tzozen_str(String_View sv)
+{
+    return tzozen_str(sv.count, sv.data);
+}

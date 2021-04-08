@@ -92,3 +92,12 @@ size_t write_to_region(char *data, size_t size, size_t nmemb, Region *region)
     memcpy(dest, data, size * nmemb);
     return nmemb;
 }
+
+Tzozen_Memory region_to_tzozen_memory(Region *region)
+{
+    Tzozen_Memory memory = {0};
+    memory.capacity = region->capacity;
+    memory.size = region->size;
+    memory.buffer = (uint8_t *) region->buffer;
+    return memory;
+}
