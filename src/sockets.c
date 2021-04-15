@@ -211,7 +211,7 @@ void socket_destroy(Socket *socket)
     free(socket);
 }
 
-ssize_t socket_write(Socket *socket, const void *buffer, size_t buffer_size)
+int socket_write(Socket *socket, const void *buffer, size_t buffer_size)
 {
     if (socket->ssl) {
         return SSL_write(socket->ssl, buffer, buffer_size);
@@ -219,17 +219,17 @@ ssize_t socket_write(Socket *socket, const void *buffer, size_t buffer_size)
         return write(socket->sd, buffer, buffer_size);
     }
 }
-ssize_t socket_write_cstr(Socket *socket, const char *cstr)
+int socket_write_cstr(Socket *socket, const char *cstr)
 {
     return socket_write(socket, cstr, strlen(cstr));
 }
 
-ssize_t socket_write_sv(Socket *socket, String_View sv)
+int socket_write_sv(Socket *socket, String_View sv)
 {
     return socket_write(socket, sv.data, sv.count);
 }
 
-ssize_t socket_read(Socket *socket, void *buffer, size_t buffer_size)
+int socket_read(Socket *socket, void *buffer, size_t buffer_size)
 {
     if (socket->ssl) {
         return SSL_read(socket->ssl, buffer, buffer_size);
