@@ -6,24 +6,11 @@
 
 #include "./sv.h"
 #include "./log.h"
+#include "./sockets.h"
 
 typedef struct {
-    SSL *ssl;
-    int sd;
+    Socket *socket;
 } Irc;
-
-bool irc_connect_plain(Log *log, Irc *irc,
-                       const char *host, const char *service,
-                       bool nonblocking);
-bool irc_connect_secure(Log *log, Irc *irc, SSL_CTX *ctx,
-                        const char *host, const char *service,
-                        bool nonblocking);
-void irc_destroy(Irc *irc);
-
-int irc_read(Irc *irc, void *buf, size_t count);
-int irc_write(Irc *irc, const void *buf, size_t count);
-
-bool irc_read_again(Irc *irc, int ret);
 
 void irc_pass(Irc *irc, String_View password);
 void irc_join(Irc *irc, String_View channel);

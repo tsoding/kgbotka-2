@@ -272,7 +272,9 @@ int main(int argc, char **argv)
 
     // Connect to IRC
     {
-        if (!irc_connect_secure(&log, &irc, ctx, HOST, SECURE_PORT, true)) {
+        irc.socket = socket_secure_connect(&log, ctx, HOST, SECURE_PORT, true);
+
+        if (!irc.socket) {
             goto error;
         }
 
@@ -294,9 +296,9 @@ int main(int argc, char **argv)
         char buffer[4096];
         size_t buffer_size = 0;
 
-        int read_size = irc_read(&irc, buffer + buffer_size, sizeof(buffer) - buffer_size);
+        int read_size = socket_read(irc.socket, buffer + buffer_size, sizeof(buffer) - buffer_size);
         size_t buffer_drops_count = 0;
-        while ((read_size > 0 || irc_read_again(&irc, read_size)) &&
+        while ((read_size > 0 || socket_read_again(irc.socket, read_size)) &&
                 buffer_drops_count < BUFFER_DROPS_THRESHOLD) {
             if (sigint) {
                 log_warning(&log, "Interrupted by the user");
@@ -382,7 +384,7 @@ int main(int argc, char **argv)
                 }
             }
 
-            read_size = irc_read(&irc, buffer + buffer_size, sizeof(buffer) - buffer_size);
+            read_size = socket_read(irc.socket, buffer + buffer_size, sizeof(buffer) - buffer_size);
         }
 
         if (buffer_drops_count >= BUFFER_DROPS_THRESHOLD) {
@@ -391,13 +393,7 @@ int main(int argc, char **argv)
         }
 
         if (read_size <= 0) {
-            if (irc.ssl) {
-                char buf[512] = {0};
-                ERR_error_string_n(SSL_get_error(irc.ssl, read_size), buf, sizeof(buf));
-                log_error(&log, "SSL failed with error: %s", buf);
-            } else {
-                log_error(&log, "Plain connection failed with error: %s", strerror(errno));
-            }
+            socket_log_last_error(&log, irc.socket, read_size);
             goto error;
         }
     }
@@ -408,7 +404,9 @@ int main(int argc, char **argv)
             free(secret_conf_content);
         }
 
-        irc_destroy(&irc);
+        if (irc.socket) {
+            socket_destroy(irc.socket);
+        }
 
         if (ctx) {
             SSL_CTX_free(ctx);
@@ -443,7 +441,9 @@ error:
             free(secret_conf_content);
         }
 
-        irc_destroy(&irc);
+        if (irc.socket) {
+            socket_destroy(irc.socket);
+        }
 
         if (ctx) {
             SSL_CTX_free(ctx);
