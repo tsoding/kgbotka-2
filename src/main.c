@@ -16,6 +16,9 @@
 #include "./http.h"
 #include "./discord.h"
 
+#define CWS_IMPLEMENTATION
+#include "./cws.h"
+
 #define TZOZEN_IMPLEMENTATION
 #include "./tzozen.h"
 
@@ -100,6 +103,18 @@ void usage(const char *program, FILE *stream)
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
 }
 
+void *cws_malloc(void *ator, size_t size)
+{
+    (void) ator;
+    return malloc(size);
+}
+
+void cws_free(void *ator, void *data, size_t size)
+{
+    (void) ator;
+    (void) size;
+    free(data);
+}
 
 void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
 {
@@ -143,14 +158,20 @@ void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
         goto error;
     }
 
-    log_info(log, "Connected to Discord successfully");
+    Cws cws = {
+        .socket = discord_socket,
+        .read = (Cws_Read) socket_read,
+        .write = (Cws_Write) socket_write,
+        .alloc = cws_malloc,
+        .free = cws_free,
+    };
 
-    char buffer[1024];
-    int read_size = socket_read(discord_socket, buffer, sizeof(buffer));
-    while (read_size > 0) {
-        fwrite(buffer, 1, read_size, stdout);
-        read_size = socket_read(discord_socket, buffer, sizeof(buffer));
+    if (cws_client_handshake(&cws, discord_host) < 0) {
+        log_error(log, "WebSocket handshake has failed");
+        goto error;
     }
+
+    log_info(log, "Connected to Discord successfully");
 
 error:
     if (discord_socket) {
