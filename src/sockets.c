@@ -175,7 +175,7 @@ Socket *socket_secure_connect(Log *log,
         }
 #else
         u_long mode = 1;
-        int i_res = ioctlsocket(sd, FIONBIO, &mode);
+        int i_res = ioctlsocket(result->sd, FIONBIO, &mode);
         if (i_res != NO_ERROR) {
             log_error(log, "Could not make the socket non-blocking: %d", i_res);
             goto error;
