@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #include "./sv.h"
-#include "./tzozen.h"
+#include "./thirdparty/tzozen.h"
 
 typedef struct {
     size_t capacity;

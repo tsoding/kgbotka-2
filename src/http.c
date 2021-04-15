@@ -1,3 +1,4 @@
+#include "./json.h"
 #include "./http.h"
 
 bool curl_get(CURL *curl, const char *url, Region *memory, String_View *body)
@@ -29,9 +30,7 @@ bool curl_get_json(CURL *curl, const char *url, Region *memory, Json_Value *body
         return false;
     }
 
-    Tzozen_Memory tmemory = region_to_tzozen_memory(memory);
-    Json_Result result = parse_json_value(&tmemory, sv_to_tzozen_str(raw_body));
-    memory->size = tmemory.size;
+    Json_Result result = parse_json_value_region_sv(memory, raw_body);
 
     if (result.is_error) {
         // TODO: specific JSON parsing error should be logged in curl_get_json()

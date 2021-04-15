@@ -15,15 +15,19 @@
 #include "./region.h"
 #include "./http.h"
 #include "./discord.h"
+#include "./json.h"
+
+#define CWS_IMPLEMENTATION
+#include "./thirdparty/cws.h"
 
 #define TZOZEN_IMPLEMENTATION
-#include "./tzozen.h"
+#include "./thirdparty/tzozen.h"
 
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
-#define HOST "irc.chat.twitch.tv"
-#define SECURE_PORT "6697"
-#define PLAIN_PORT "6667"
+#define TWITCH_HOST "irc.chat.twitch.tv"
+#define SECURE_TWITCH_PORT "6697"
+#define PLAIN_TWITCH_PORT "6667"
 
 // http://www.iso-9899.info/n1570.html#5.1.2.3p5
 volatile sig_atomic_t sigint = 0;
@@ -100,23 +104,94 @@ void usage(const char *program, FILE *stream)
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
 }
 
-
-void connect_discord(CURL *curl, Region *memory, Log *log)
+String_View cws_message_chunk_to_sv(Cws_Message_Chunk chunk)
 {
+    return (String_View) {
+        .data = (const char *) chunk.payload,
+        .count = chunk.payload_len,
+    };
+}
+
+void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
+{
+    Socket *discord_socket = NULL;
+
     const char *url = "https://discord.com/api/gateway";
     Json_Value body = {0};
     if (!curl_get_json(curl, url, memory, &body)) {
         log_error(log, "Could not retrieve Discord gateway");
-        return;
+        goto error;
     }
 
     String_View gateway_url = {0};
     if (!extract_discord_gateway_url(body, &gateway_url)) {
         log_error(log, "Could not extract discord gateway url from the JSON.");
-        return;
+        goto error;
     }
 
-    log_info(log, "Discord gateway url: "SV_Fmt, SV_Arg(gateway_url));
+    if (!sv_cut_prefix(&gateway_url, SV("wss://"))) {
+        log_error(log, "Incorrect gateway URL "SV_Fmt, SV_Arg(gateway_url));
+        goto error;
+    }
+
+    const char *discord_host = region_sv_to_cstr(memory, gateway_url);
+    if (!discord_host) {
+        log_error(log, "Could not allocate enough memory to connect to Discord");
+        goto error;
+    }
+
+    const char *discord_port = "443";
+
+    log_info(log, "Trying to connect to Discord...");
+    discord_socket = socket_secure_connect(
+                         log,
+                         ctx,
+                         discord_host,
+                         discord_port,
+                         false);
+    if (!discord_socket) {
+        log_error(log, "Could not connect to %s:%s", discord_host, discord_port);
+        goto error;
+    }
+
+    Cws cws = {
+        .socket = discord_socket,
+        .read = (Cws_Read) socket_read,
+        .write = (Cws_Write) socket_write,
+        .alloc = cws_malloc,
+        .free = cws_free,
+    };
+
+    if (cws_client_handshake(&cws, discord_host) < 0) {
+        log_error(log, "WebSocket handshake has failed");
+        goto error;
+    }
+
+    log_info(log, "Connected to Discord successfully");
+
+    Cws_Message message = {0};
+    if (cws_read_message(&cws, &message) == 0) {
+        Json_Result result = parse_json_value_region_sv(
+                                 memory,
+                                 cws_message_chunk_to_sv(*message.chunks));
+        if (!result.is_error) {
+            Discord_Payload payload = {0};
+            if (discord_deserialize_payload(result.value, &payload)) {
+                log_info(log, "DISCORD SENT: %s", discord_opcode_as_cstr(payload.opcode));
+            } else {
+                log_error(log, "Could not deserialize message from Discord");
+            }
+        } else {
+            log_error(log, "Could not parse WebSocket message from Discord");
+        }
+    } else {
+        log_error(log, "Could not read a message from Discord: %s", cws_get_error_string(&cws));
+    }
+
+error:
+    if (discord_socket) {
+        socket_destroy(discord_socket);
+    }
 }
 
 int main(int argc, char **argv)
@@ -272,7 +347,7 @@ int main(int argc, char **argv)
 
     // Connect to IRC
     {
-        irc.socket = socket_secure_connect(&log, ctx, HOST, SECURE_PORT, true);
+        irc.socket = socket_secure_connect(&log, ctx, TWITCH_HOST, SECURE_TWITCH_PORT, true);
 
         if (!irc.socket) {
             goto error;
@@ -287,7 +362,7 @@ int main(int argc, char **argv)
     }
 
     // Connect to Discord
-    connect_discord(curl, cmd_region, &log);
+    connect_discord(curl, cmd_region, &log, ctx);
 
     // IRC event loop
     {
