@@ -101,3 +101,14 @@ Tzozen_Memory region_to_tzozen_memory(Region *region)
     memory.buffer = (uint8_t *) region->buffer;
     return memory;
 }
+
+char *region_sv_to_cstr(Region *region, String_View sv)
+{
+    char *buffer = region_alloc(region, sv.count + 1);
+    if (buffer == NULL) {
+        return NULL;
+    }
+    memcpy(buffer, sv.data, sv.count);
+    buffer[sv.count] = '\0';
+    return buffer;
+}

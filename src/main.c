@@ -21,9 +21,9 @@
 
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
-#define HOST "irc.chat.twitch.tv"
-#define SECURE_PORT "6697"
-#define PLAIN_PORT "6667"
+#define TWITCH_HOST "irc.chat.twitch.tv"
+#define SECURE_TWITCH_PORT "6697"
+#define PLAIN_TWITCH_PORT "6667"
 
 // http://www.iso-9899.info/n1570.html#5.1.2.3p5
 volatile sig_atomic_t sigint = 0;
@@ -101,22 +101,61 @@ void usage(const char *program, FILE *stream)
 }
 
 
-void connect_discord(CURL *curl, Region *memory, Log *log)
+void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
 {
+    Socket *discord_socket = NULL;
+
     const char *url = "https://discord.com/api/gateway";
     Json_Value body = {0};
     if (!curl_get_json(curl, url, memory, &body)) {
         log_error(log, "Could not retrieve Discord gateway");
-        return;
+        goto error;
     }
 
     String_View gateway_url = {0};
     if (!extract_discord_gateway_url(body, &gateway_url)) {
         log_error(log, "Could not extract discord gateway url from the JSON.");
-        return;
+        goto error;
     }
 
-    log_info(log, "Discord gateway url: "SV_Fmt, SV_Arg(gateway_url));
+    if (!sv_cut_prefix(&gateway_url, SV("wss://"))) {
+        log_error(log, "Incorrect gateway URL "SV_Fmt, SV_Arg(gateway_url));
+        goto error;
+    }
+
+    const char *discord_host = region_sv_to_cstr(memory, gateway_url);
+    if (!discord_host) {
+        log_error(log, "Could not allocate enough memory to connect to Discord");
+        goto error;
+    }
+
+    const char *discord_port = "443";
+
+    log_info(log, "Trying to connect to Discord...");
+    discord_socket = socket_secure_connect(
+                         log,
+                         ctx,
+                         discord_host,
+                         discord_port,
+                         false);
+    if (!discord_socket) {
+        log_error(log, "Could not connect to %s:%s", discord_host, discord_port);
+        goto error;
+    }
+
+    log_info(log, "Connected to Discord successfully");
+
+    char buffer[1024];
+    int read_size = socket_read(discord_socket, buffer, sizeof(buffer));
+    while (read_size > 0) {
+        fwrite(buffer, 1, read_size, stdout);
+        read_size = socket_read(discord_socket, buffer, sizeof(buffer));
+    }
+
+error:
+    if (discord_socket) {
+        socket_destroy(discord_socket);
+    }
 }
 
 int main(int argc, char **argv)
@@ -272,7 +311,7 @@ int main(int argc, char **argv)
 
     // Connect to IRC
     {
-        irc.socket = socket_secure_connect(&log, ctx, HOST, SECURE_PORT, true);
+        irc.socket = socket_secure_connect(&log, ctx, TWITCH_HOST, SECURE_TWITCH_PORT, true);
 
         if (!irc.socket) {
             goto error;
@@ -287,7 +326,7 @@ int main(int argc, char **argv)
     }
 
     // Connect to Discord
-    connect_discord(curl, cmd_region, &log);
+    connect_discord(curl, cmd_region, &log, ctx);
 
     // IRC event loop
     {
