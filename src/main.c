@@ -103,19 +103,6 @@ void usage(const char *program, FILE *stream)
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
 }
 
-void *cws_malloc(void *ator, size_t size)
-{
-    (void) ator;
-    return malloc(size);
-}
-
-void cws_free(void *ator, void *data, size_t size)
-{
-    (void) ator;
-    (void) size;
-    free(data);
-}
-
 void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
 {
     Socket *discord_socket = NULL;

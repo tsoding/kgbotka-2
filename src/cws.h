@@ -78,9 +78,11 @@ typedef enum {
 
 typedef void* Cws_Socket;
 typedef void* Cws_Allocator;
-
 typedef int (*Cws_Read)(Cws_Socket socket, void *buf, size_t count);
 typedef int (*Cws_Write)(Cws_Socket socket, const void *buf, size_t count);
+typedef void *(*Cws_Alloc)(Cws_Allocator ator, size_t size);
+typedef void (*Cws_Free)(Cws_Allocator ator, void *data, size_t size);
+
 
 typedef struct {
     Cws_Error error;
@@ -90,8 +92,8 @@ typedef struct {
     Cws_Write write;
 
     Cws_Allocator ator;
-    void *(*alloc)(Cws_Allocator ator, size_t size);
-    void (*free)(Cws_Allocator ator, void *data, size_t size);
+    Cws_Alloc alloc;
+    Cws_Free free;
 } Cws;
 
 int cws_client_handshake(Cws *cws, const char *host);
@@ -103,6 +105,11 @@ void cws_free_message(Cws *cws, Cws_Message *message);
 int cws_send_frame(Cws *cws, bool fin, Cws_Opcode opcode, const uint8_t *payload, uint64_t payload_len);
 int cws_read_frame(Cws *cws, Cws_Frame *frame);
 void cws_free_frame(Cws *cws, Cws_Frame *frame);
+
+const char *cws_get_error_string(Cws *cws);
+
+int cws_ssl_read(void *socket, void *buf, size_t count);
+int cws_ssl_write(void *socket, const void *buf, size_t count);
 
 #endif // CWS_H_
 
@@ -135,8 +142,6 @@ int cws_client_handshake(Cws *cws, const char *host)
     // 3. The handshake fits into sizeof(buffer)
     char buffer[1024];
     int buffer_size = cws->read(cws->socket, buffer, sizeof(buffer));
-    // fwrite(buffer, 1, buffer_size, stdout);
-    // printf("------------------------------\n");
     if (buffer_size < 2 ||
             buffer[buffer_size - 2] != '\r' ||
             buffer[buffer_size - 1] != '\n') {
@@ -533,6 +538,38 @@ void cws_free_message(Cws *cws, Cws_Message *message)
     }
 
     message->chunks = NULL;
+}
+
+const char *cws_get_error_string(Cws *cws)
+{
+    switch (cws->error) {
+    case CWS_NO_ERROR:
+        return "No error has happen. The developer of the application screwed up.";
+    case CWS_CLIENT_HANDSHAKE_ERROR:
+        return "Client WebSocket handshake has failed.";
+    case CWS_SOCKET_ERROR:
+        return "Socket read/write error.";
+    case CWS_ALLOCATOR_ERROR:
+        return "Out of memory";
+    case CWS_SERVER_CLOSE_ERROR:
+        return "Server closed connection";
+    default:
+        assert(0 && "Unreachable");
+        return NULL;
+    }
+}
+
+void *cws_malloc(void *ator, size_t size)
+{
+    (void) ator;
+    return malloc(size);
+}
+
+void cws_free(void *ator, void *data, size_t size)
+{
+    (void) ator;
+    (void) size;
+    free(data);
 }
 
 #endif // CWS_IMPLEMENTATION
