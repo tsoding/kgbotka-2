@@ -160,6 +160,15 @@ void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
 
     log_info(log, "Connected to Discord successfully");
 
+    Cws_Message message = {0};
+    if (cws_read_message(&cws, &message) == 0) {
+        for (Cws_Message_Chunk *chunk = message.chunks; chunk != NULL; chunk = chunk->next) {
+            fwrite(chunk->payload, 1, chunk->payload_len, stdout);
+        }
+    } else {
+        log_error(log, "Could not read a message from Discord: %s", cws_get_error_string(&cws));
+    }
+
 error:
     if (discord_socket) {
         socket_destroy(discord_socket);
