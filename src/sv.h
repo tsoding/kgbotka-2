@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include "./tzozen.h"
+#include "./thirdparty/tzozen.h"
 
 typedef struct {
     size_t count;

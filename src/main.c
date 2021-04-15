@@ -15,12 +15,13 @@
 #include "./region.h"
 #include "./http.h"
 #include "./discord.h"
+#include "./json.h"
 
 #define CWS_IMPLEMENTATION
-#include "./cws.h"
+#include "./thirdparty/cws.h"
 
 #define TZOZEN_IMPLEMENTATION
-#include "./tzozen.h"
+#include "./thirdparty/tzozen.h"
 
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
@@ -103,6 +104,14 @@ void usage(const char *program, FILE *stream)
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
 }
 
+String_View cws_message_chunk_to_sv(Cws_Message_Chunk chunk)
+{
+    return (String_View) {
+        .data = (const char *) chunk.payload,
+        .count = chunk.payload_len,
+    };
+}
+
 void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
 {
     Socket *discord_socket = NULL;
@@ -162,8 +171,18 @@ void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
 
     Cws_Message message = {0};
     if (cws_read_message(&cws, &message) == 0) {
-        for (Cws_Message_Chunk *chunk = message.chunks; chunk != NULL; chunk = chunk->next) {
-            fwrite(chunk->payload, 1, chunk->payload_len, stdout);
+        Json_Result result = parse_json_value_region_sv(
+                                 memory,
+                                 cws_message_chunk_to_sv(*message.chunks));
+        if (!result.is_error) {
+            Discord_Payload payload = {0};
+            if (discord_deserialize_payload(result.value, &payload)) {
+                log_info(log, "DISCORD SENT: %s", discord_opcode_as_cstr(payload.opcode));
+            } else {
+                log_error(log, "Could not deserialize message from Discord");
+            }
+        } else {
+            log_error(log, "Could not parse WebSocket message from Discord");
         }
     } else {
         log_error(log, "Could not read a message from Discord: %s", cws_get_error_string(&cws));
