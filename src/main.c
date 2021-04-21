@@ -7,6 +7,11 @@
 #include <ctype.h>
 #include <signal.h>
 
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200112L
+#include <unistd.h>
+#endif
+
 #include <curl/curl.h>
 
 #include "./log.h"
@@ -345,28 +350,40 @@ int main(int argc, char **argv)
         log_info(&log, "Successfully allocated memory for commands");
     }
 
-    // Connect to IRC
-    {
-        irc.socket = socket_secure_connect(&log, ctx, TWITCH_HOST, SECURE_TWITCH_PORT, true);
+reconnect: {
+        static bool first_reconnect = true;
+        // Connect to IRC
+        {
+            irc.socket = socket_secure_connect(&log, ctx, TWITCH_HOST, SECURE_TWITCH_PORT, true);
 
-        if (!irc.socket) {
-            goto error;
+            if (!irc.socket) {
+                if (!first_reconnect) {
+#ifdef _WIN32
+                    Sleep(1000);
+#else
+                    sleep(1);
+#endif
+                }
+                first_reconnect = false;
+                log_info(&log, "Trying to reconnect..");
+                goto reconnect;
+            }
+
+            log_info(&log, "Connected to Twitch IRC successfully");
+
+            irc_pass(&irc, secret_password);
+            irc_nick(&irc, secret_nickname);
+            irc_cap_req(&irc, SV("twitch.tv/tags"));
+            irc_join(&irc, secret_channel);
         }
 
-        log_info(&log, "Connected to Twitch IRC successfully");
+        // Connect to Discord
+        connect_discord(curl, cmd_region, &log, ctx);
 
-        irc_pass(&irc, secret_password);
-        irc_nick(&irc, secret_nickname);
-        irc_cap_req(&irc, SV("twitch.tv/tags"));
-        irc_join(&irc, secret_channel);
+        first_reconnect = true;
     }
-
-    // Connect to Discord
-    connect_discord(curl, cmd_region, &log, ctx);
-
     // IRC event loop
     {
-        // TODO(#24): autoreconnect
 #define BUFFER_DROPS_THRESHOLD 5
         char buffer[4096];
         size_t buffer_size = 0;
@@ -469,7 +486,8 @@ int main(int argc, char **argv)
 
         if (read_size <= 0) {
             socket_log_last_error(&log, irc.socket, read_size);
-            goto error;
+            log_info(&log, "Trying to reconnect..");
+            goto reconnect;
         }
     }
 

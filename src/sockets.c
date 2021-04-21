@@ -47,7 +47,7 @@ Socket *socket_plain_connect(Log *log,
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    if (getaddrinfo(host, service, &hints, &addrs) < 0) {
+    if (getaddrinfo(host, service, &hints, &addrs) != 0) {
         log_error(log, "Could not get address of `%s`: %s", host, strerror(errno));
         goto error;
     }
