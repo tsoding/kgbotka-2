@@ -360,8 +360,8 @@ int main(int argc, char **argv)
         log_info(&log, "Successfully allocated memory for commands");
     }
 
+    bool first_reconnect = true;
 reconnect: {
-        static bool first_reconnect = true;
         // Connect to IRC
         {
             irc.socket = socket_secure_connect(&log, ctx, TWITCH_HOST, SECURE_TWITCH_PORT, true);
@@ -388,6 +388,7 @@ reconnect: {
 
         first_reconnect = true;
     }
+
     // IRC event loop
     {
 #define BUFFER_DROPS_THRESHOLD 5
