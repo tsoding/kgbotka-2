@@ -16,7 +16,7 @@ bool curl_get(CURL *curl, const char *url, Region *memory, String_View *body)
     }
 
     if (res != CURLE_OK) {
-        // TODO: specific curl error should be logged in curl_get()
+        // TODO(#34): specific curl error should be logged in curl_get()
         return false;
     }
 
