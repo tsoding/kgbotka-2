@@ -128,8 +128,12 @@ String_View cws_message_chunk_to_sv(Cws_Message_Chunk chunk)
     };
 }
 
+// TODO: Research on a possibility of using ETF for Discord instead of JSON
+// https://discord.com/developers/docs/topics/gateway#etfjson
+
 void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
 {
+    // https://discord.com/developers/docs/topics/gateway#connecting-to-the-gateway
     Socket *discord_socket = NULL;
 
     const char *url = "https://discord.com/api/gateway";
@@ -194,6 +198,10 @@ void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
             Discord_Payload payload = {0};
             if (discord_deserialize_payload(result.value, &payload)) {
                 log_info(log, "DISCORD SENT: %s", discord_opcode_as_cstr(payload.opcode));
+                if (payload.opcode == DISCORD_OPCODE_HELLO) {
+                    log_info(log, "HEARTBEAT INTERVAL: %"PRIu64,
+                             payload.hello.heartbeat_interval);
+                }
             } else {
                 log_error(log, "Could not deserialize message from Discord");
             }

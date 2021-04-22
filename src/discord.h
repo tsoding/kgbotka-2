@@ -22,6 +22,12 @@ const char *discord_opcode_as_cstr(Discord_Opcode opcode);
 
 typedef struct {
     Discord_Opcode opcode;
+    uint64_t heartbeat_interval;
+} Discord_Hello;
+
+typedef union {
+    Discord_Opcode opcode;
+    Discord_Hello hello;
 } Discord_Payload;
 
 bool discord_deserialize_payload(Json_Value json_payload, Discord_Payload *payload);
