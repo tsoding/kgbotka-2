@@ -1,18 +1,6 @@
 #ifndef TZOZEN_H_
 #define TZOZEN_H_
 
-// TODO: https://github.com/nothings/stb/blob/master/docs/stb_howto.txt
-//   [+] 1. #define LIBRARYNAME_IMPLEMENTATION
-//   [+] 2. AVOID DEPENDENCIES
-//   [+] 3. AVOID MALLOC
-//   [+] 4. ALLOW STATIC IMPLEMENTATION
-//   [+] 5. MAKE ACCESSIBLE FROM C
-//   [ ] 6. NAMESPACE PRIVATE FUNCTIONS
-//   [-] 7. EASY-TO-COMPLY LICENSE
-//     > why would you care whether your credit appeared there?
-//     Because I could put it to my CV and it would be verifiable by Ctrl+F.
-//     Which is important when you are nobody.
-
 // NOTES:
 // - Define TZOZEN_NO_STDIO to remove all the code that uses stdio.h
 
@@ -113,9 +101,6 @@ TZOZENDEF int json_object_push(Tzozen_Memory *memory, Json_Object *object, Tzoze
 TZOZENDEF Json_Value json_object_value_by_key(Json_Object object, Tzozen_Str key);
 
 typedef struct {
-    // TODO: because of the use of Tzozen_Str-s Json_Number can hold an incorrect value
-    //   But you can only get an incorrect Json_Number if you construct it yourself.
-    //   Anything coming from parse_json_value should be always a correct number.
     Tzozen_Str integer;
     Tzozen_Str fraction;
     Tzozen_Str exponent;
@@ -195,7 +180,6 @@ TZOZENDEF void print_json_error(FILE *stream, Json_Result result, Tzozen_Str sou
 #endif  // TZOZEN_H_
 
 #ifdef TZOZEN_IMPLEMENTATION
-// TODO: port https://github.com/tsoding/skedudle/pull/74 when it's merged
 
 TZOZENDEF Tzozen_Memory tzozen_memory(uint8_t *buffer, size_t capacity)
 {
@@ -578,7 +562,6 @@ TZOZENDEF Json_Result parse_json_number(Tzozen_Memory *memory, Tzozen_Str source
         tzozen_str_chop(&source, 1);
     }
 
-    // TODO: empty integer with fraction is not taken into account
     if (integer.len == 0
             || tzozen_str_equal(integer, TSTR("-"))
             || (integer.len > 1 && *integer.data == '0')
@@ -759,7 +742,6 @@ TZOZENDEF Json_Result parse_escape_sequence(Tzozen_Memory *memory, Tzozen_Str so
             // `parse_escape_sequence()` is used 2020-05-05) we are
             // copying it to `memory`.
             //
-            // TODO: We don't have any policy on what kind of memory we should always refer to int Json_Value-s and Json_Result-s
             Tzozen_Str s = {1, &unescape_map[i][1]};
             return result_success(tzozen_str_drop(source, 1), json_string(s));
         }
@@ -862,7 +844,6 @@ TZOZENDEF Json_Result parse_json_string(Tzozen_Memory *memory, Tzozen_Str source
 
             source = result.rest;
         } else {
-            // TODO: json parser is not aware of the input encoding
             assert(buffer_size < buffer_capacity);
             buffer[buffer_size++] = *source.data;
             tzozen_str_chop(&source, 1);
@@ -1019,7 +1000,6 @@ TZOZENDEF Json_Result parse_json_value_with_depth(Tzozen_Memory *memory, Tzozen_
     return parse_json_number(memory, source);
 }
 
-// TODO: parse_json_value is not aware of input encoding
 TZOZENDEF Json_Result parse_json_value(Tzozen_Memory *memory, Tzozen_Str source)
 {
     return parse_json_value_with_depth(memory, source, 0);

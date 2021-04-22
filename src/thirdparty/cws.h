@@ -122,12 +122,10 @@ int cws_client_handshake(Cws *cws, const char *host)
     char handshake[1024] = {0};
 
     snprintf(handshake, sizeof(handshake),
-             // TODO: customizable resource path
              "GET / HTTP/1.1\r\n"
              "Host: %s\r\n"
              "Upgrade: websocket\r\n"
              "Connection: Upgrade\r\n"
-             // TODO: custom WebSocket key
              "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
              "Sec-WebSocket-Version: 13\r\n"
              "\r\n",
@@ -135,11 +133,6 @@ int cws_client_handshake(Cws *cws, const char *host)
     const size_t handshake_size = strlen(handshake);
     cws->write(cws->socket, handshake, handshake_size);
 
-    // TODO: the server handshake is literally ignored
-    // Right now we are making this assumptions:
-    // 1. The server sent the successful handshake
-    // 2. Nothing is sent after the handshake so we can distinguish the frames
-    // 3. The handshake fits into sizeof(buffer)
     char buffer[1024];
     int buffer_size = cws->read(cws->socket, buffer, sizeof(buffer));
     if (buffer_size < 2 ||
@@ -218,7 +211,6 @@ int cws_read_frame(Cws *cws, Cws_Frame *frame)
 
     // Parse the payload length
     {
-        // TODO: do we need to reverse the bytes on a machine with a different endianess than x86?
         uint8_t len = PAYLOAD_LEN(header);
         switch (len) {
         case 126: {
@@ -251,7 +243,6 @@ int cws_read_frame(Cws *cws, Cws_Frame *frame)
     }
 
     // Read the mask
-    // TODO: the server may not send masked frames
     {
         uint32_t mask = 0;
         bool masked = MASK(header);
@@ -278,7 +269,6 @@ int cws_read_frame(Cws *cws, Cws_Frame *frame)
             }
             memset(frame->payload, 0, payload_len);
 
-            // TODO: cws_read_frame does not handle when cws->read didn't read the whole payload
             if (cws->read(cws->socket, frame->payload, frame->payload_len) <= 0) {
                 cws->error = CWS_SOCKET_ERROR;
                 goto error;
@@ -313,7 +303,6 @@ int cws_send_frame(Cws *cws, bool fin, Cws_Opcode opcode, const uint8_t *payload
 
     // Send masked and payload length
     {
-        // TODO: do we need to reverse the bytes on a machine with a different endianess than x86?
         // NOTE: client frames are always masked
         if (payload_len < 126) {
             uint8_t data = (1 << 7) | payload_len;
@@ -475,8 +464,6 @@ int cws_read_message(Cws *cws, Cws_Message *message)
 
             cws_free_frame(cws, &frame);
         } else {
-            // TODO: cws_read_message does not verify that the message starts with non CONT frame (does it have to start with non-CONT frame)?
-            // TODO: cws_read_message does not verify that any non-fin "continuation" frames have the CONT opcode
             if (end == NULL) {
                 end = cws->alloc(cws->ator, sizeof(*end));
                 if (end == NULL) {
@@ -573,5 +560,3 @@ void cws_free(void *ator, void *data, size_t size)
 }
 
 #endif // CWS_IMPLEMENTATION
-// TODO: Test with Autobahn test suite
-// https://crossbar.io/docs/WebSocket-Compliance-Testing/
