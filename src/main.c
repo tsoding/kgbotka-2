@@ -360,6 +360,8 @@ int main(int argc, char **argv)
         log_info(&log, "Successfully allocated memory for commands");
     }
 
+    // TODO(#36): reconnect with an exponential backoff
+    // https://dev.twitch.tv/docs/irc/guide#re-connecting-to-twitch-irc
     bool first_reconnect = true;
 reconnect: {
         // Connect to IRC
