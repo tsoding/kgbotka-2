@@ -55,14 +55,20 @@ bool discord_deserialize_payload(Json_Value json_payload, Discord_Payload *paylo
     if (json_op.type != JSON_NUMBER) return false;
     payload->opcode = json_number_to_integer(json_op.number);
 
-    Json_Value json_d = json_object_value_by_key(json_payload.object, TSTR("d"));
-    if (json_d.type != JSON_OBJECT) return false;
+    switch (payload->opcode) {
+    case DISCORD_OPCODE_HELLO: {
+        Json_Value json_d = json_object_value_by_key(json_payload.object, TSTR("d"));
+        if (json_d.type != JSON_OBJECT) return false;
 
-    Json_Value json_heartbeat_interval =
-        json_object_value_by_key(json_d.object, TSTR("heartbeat_interval"));
-    if (json_heartbeat_interval.type != JSON_NUMBER) return false;
-    payload->hello.heartbeat_interval =
-        json_number_to_integer(json_heartbeat_interval.number);
+        Json_Value json_heartbeat_interval =
+            json_object_value_by_key(json_d.object, TSTR("heartbeat_interval"));
+        if (json_heartbeat_interval.type != JSON_NUMBER) return false;
+        payload->hello.heartbeat_interval =
+            json_number_to_integer(json_heartbeat_interval.number);
+    } break;
+
+    default: {}
+    }
 
     return true;
 }
