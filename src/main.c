@@ -1,3 +1,9 @@
+#ifndef _WIN32
+#define _XOPEN_SOURCE 500
+#define _POSIX_C_SOURCE 200112L
+#include <unistd.h>
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,11 +12,6 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <signal.h>
-
-#ifndef _WIN32
-#define _POSIX_C_SOURCE 200112L
-#include <unistd.h>
-#endif
 
 #include <curl/curl.h>
 
@@ -107,6 +108,15 @@ char *shift(int *argc, char ***argv)
 void usage(const char *program, FILE *stream)
 {
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
+}
+
+void sleep_ms(unsigned int milliseconds)
+{
+#ifdef _WIN32
+    Sleep(milliseconds);
+#else
+    usleep(milliseconds * 1000);
+#endif
 }
 
 String_View cws_message_chunk_to_sv(Cws_Message_Chunk chunk)
@@ -358,11 +368,7 @@ reconnect: {
 
             if (!irc.socket) {
                 if (!first_reconnect) {
-#ifdef _WIN32
-                    Sleep(1000);
-#else
-                    sleep(1);
-#endif
+                    sleep_ms(1000);
                 }
                 first_reconnect = false;
                 log_info(&log, "Trying to reconnect..");
