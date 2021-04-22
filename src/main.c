@@ -1,3 +1,9 @@
+#ifndef _WIN32
+#define _XOPEN_SOURCE 500
+#define _POSIX_C_SOURCE 200112L
+#include <unistd.h>
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,6 +108,15 @@ char *shift(int *argc, char ***argv)
 void usage(const char *program, FILE *stream)
 {
     fprintf(stream, "Usage: %s <secret.conf>\n", program);
+}
+
+void sleep_ms(unsigned int milliseconds)
+{
+#ifdef _WIN32
+    Sleep(milliseconds);
+#else
+    usleep(milliseconds * 1000);
+#endif
 }
 
 String_View cws_message_chunk_to_sv(Cws_Message_Chunk chunk)
@@ -345,28 +360,39 @@ int main(int argc, char **argv)
         log_info(&log, "Successfully allocated memory for commands");
     }
 
-    // Connect to IRC
-    {
-        irc.socket = socket_secure_connect(&log, ctx, TWITCH_HOST, SECURE_TWITCH_PORT, true);
+    // TODO(#36): reconnect with an exponential backoff
+    // https://dev.twitch.tv/docs/irc/guide#re-connecting-to-twitch-irc
+    bool first_reconnect = true;
+reconnect: {
+        // Connect to IRC
+        {
+            irc.socket = socket_secure_connect(&log, ctx, TWITCH_HOST, SECURE_TWITCH_PORT, true);
 
-        if (!irc.socket) {
-            goto error;
+            if (!irc.socket) {
+                if (!first_reconnect) {
+                    sleep_ms(1000);
+                }
+                first_reconnect = false;
+                log_info(&log, "Trying to reconnect..");
+                goto reconnect;
+            }
+
+            log_info(&log, "Connected to Twitch IRC successfully");
+
+            irc_pass(&irc, secret_password);
+            irc_nick(&irc, secret_nickname);
+            irc_cap_req(&irc, SV("twitch.tv/tags"));
+            irc_join(&irc, secret_channel);
         }
 
-        log_info(&log, "Connected to Twitch IRC successfully");
+        // Connect to Discord
+        connect_discord(curl, cmd_region, &log, ctx);
 
-        irc_pass(&irc, secret_password);
-        irc_nick(&irc, secret_nickname);
-        irc_cap_req(&irc, SV("twitch.tv/tags"));
-        irc_join(&irc, secret_channel);
+        first_reconnect = true;
     }
-
-    // Connect to Discord
-    connect_discord(curl, cmd_region, &log, ctx);
 
     // IRC event loop
     {
-        // TODO(#24): autoreconnect
 #define BUFFER_DROPS_THRESHOLD 5
         char buffer[4096];
         size_t buffer_size = 0;
@@ -469,7 +495,8 @@ int main(int argc, char **argv)
 
         if (read_size <= 0) {
             socket_log_last_error(&log, irc.socket, read_size);
-            goto error;
+            log_info(&log, "Trying to reconnect..");
+            goto reconnect;
         }
     }
 

@@ -16,7 +16,7 @@ bool curl_get(CURL *curl, const char *url, Region *memory, String_View *body)
     }
 
     if (res != CURLE_OK) {
-        // TODO: specific curl error should be logged in curl_get()
+        // TODO(#34): specific curl error should be logged in curl_get()
         return false;
     }
 
@@ -33,7 +33,7 @@ bool curl_get_json(CURL *curl, const char *url, Region *memory, Json_Value *body
     Json_Result result = parse_json_value_region_sv(memory, raw_body);
 
     if (result.is_error) {
-        // TODO: specific JSON parsing error should be logged in curl_get_json()
+        // TODO(#35): specific JSON parsing error should be logged in curl_get_json()
         return false;
     }
 
