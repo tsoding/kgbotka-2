@@ -44,6 +44,9 @@ typedef struct  {
     const char *data;
 } Tzozen_Str;
 
+#define TSTR_Fmt "%.*s"
+#define TSTR_Arg(tstr) (int) tstr.len, tstr.data
+
 #define TSTR(literal) tzozen_str(sizeof(literal) - 1, literal)
 
 TZOZENDEF Tzozen_Str tzozen_str(size_t len, const char *data);

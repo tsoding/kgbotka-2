@@ -24,7 +24,7 @@ String_View region_sv_concat(Region *region, ...);
 
 char *region_sv_to_cstr(Region *region, String_View sv);
 
-size_t write_to_region(char *data, size_t size, size_t nmemb, Region *region);
+size_t write_to_region(const char *data, size_t size, size_t nmemb, Region *region);
 
 Tzozen_Memory region_to_tzozen_memory(Region *region);
 
