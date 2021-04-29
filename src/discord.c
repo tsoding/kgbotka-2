@@ -65,10 +65,78 @@ bool discord_deserialize_payload(Json_Value json_payload, Discord_Payload *paylo
         if (json_heartbeat_interval.type != JSON_NUMBER) return false;
         payload->hello.heartbeat_interval =
             json_number_to_integer(json_heartbeat_interval.number);
-    } break;
+    }
+    break;
 
-    default: {}
+    default:
+    {}
     }
 
     return true;
+}
+
+void serialize_discord_conn_prop(Jim *jim, Discord_Conn_Prop properties)
+{
+    jim_object_begin(jim);
+    {
+        jim_member_key(jim, "$os");
+        jim_string_sized(jim, properties.os.data, properties.os.count);
+
+        jim_member_key(jim, "$browser");
+        jim_string_sized(jim, properties.browser.data, properties.browser.count);
+
+        jim_member_key(jim, "$device");
+        jim_string_sized(jim, properties.device.data, properties.device.count);
+    }
+    jim_object_end(jim);
+}
+
+void serialize_discord_identify(Jim *jim, Discord_Identify identify)
+{
+    jim_object_begin(jim);
+    {
+        jim_member_key(jim, "token");
+        jim_string_sized(jim, identify.token.data, identify.token.count);
+
+        jim_member_key(jim, "properties");
+        serialize_discord_conn_prop(jim, identify.properties);
+
+        jim_member_key(jim, "intents");
+        jim_integer(jim, identify.intents);
+    }
+    jim_object_end(jim);
+}
+
+void serialize_discord_hello(Jim *jim, Discord_Hello hello)
+{
+    jim_object_begin(jim);
+    {
+        jim_member_key(jim, "heartbeat_interval");
+        jim_integer(jim, hello.heartbeat_interval);
+    }
+    jim_object_end(jim);
+}
+
+void serialize_discord_payload(Jim *jim, Discord_Payload payload)
+{
+    jim_object_begin(jim);
+    {
+        jim_member_key(jim, "op");
+        jim_integer(jim, payload.opcode);
+
+        jim_member_key(jim, "d");
+        switch (payload.opcode) {
+        case DISCORD_OPCODE_HELLO:
+            serialize_discord_hello(jim, payload.hello);
+            break;
+
+        case DISCORD_OPCODE_IDENTIFY:
+            serialize_discord_identify(jim, payload.identify);
+            break;
+
+        default:
+            assert(false && "unreachable");
+        }
+    }
+    jim_object_end(jim);
 }
