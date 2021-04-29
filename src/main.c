@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 #include <signal.h>
+#include <inttypes.h>
 
 #include <curl/curl.h>
 
