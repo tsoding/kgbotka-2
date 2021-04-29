@@ -124,7 +124,7 @@ void sleep_ms(unsigned int milliseconds)
 #endif
 }
 
-// TODO: Research on a possibility of using ETF for Discord instead of JSON
+// TODO(#40): Research on a possibility of using ETF for Discord instead of JSON
 // https://discord.com/developers/docs/topics/gateway#etfjson
 
 void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx, String_View token)
