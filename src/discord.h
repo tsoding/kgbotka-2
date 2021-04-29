@@ -1,9 +1,14 @@
 #ifndef DISCORD_H_
 #define DISCORD_H_
 
+#include <stdbool.h>
+
 #include "./thirdparty/tzozen.h"
 #include "./thirdparty/jim.h"
+#include "./thirdparty/cws.h"
 #include "./sv.h"
+#include "./log.h"
+#include "./region.h"
 
 typedef enum {
     DISCORD_OPCODE_DISPATCH = 0,
@@ -22,7 +27,6 @@ typedef enum {
 const char *discord_opcode_as_cstr(Discord_Opcode opcode);
 
 typedef struct {
-    Discord_Opcode opcode;
     uint64_t heartbeat_interval;
 } Discord_Hello;
 
@@ -54,24 +58,30 @@ typedef struct {
 
 // https://discord.com/developers/docs/topics/gateway#identify
 typedef struct {
-    Discord_Opcode opcode;
     String_View token;
     Discord_Conn_Prop properties;
     Discord_Gateway_Intents intents;
 } Discord_Identify;
 
 typedef union {
-    Discord_Opcode opcode;
     Discord_Hello hello;
     Discord_Identify identify;
+} Discord_D;
+
+typedef struct {
+    Discord_Opcode op;
+    Discord_D d;
+    String_View t;
 } Discord_Payload;
+
+bool receive_discord_payload_from_websocket(Cws *cws, Log *log, Region *memory, Discord_Payload *payload);
 
 void serialize_discord_conn_prop(Jim *jim, Discord_Conn_Prop properties);
 void serialize_discord_payload(Jim *jim, Discord_Payload payload);
 void serialize_discord_identify(Jim *jim, Discord_Identify identify);
 void serialize_discord_hello(Jim *jim, Discord_Hello hello);
 
-bool discord_deserialize_payload(Json_Value json_payload, Discord_Payload *payload);
+bool deserialize_discord_payload(Json_Value json_payload, Discord_Payload *payload);
 
 bool extract_discord_gateway_url(Json_Value discord_gateway_response,
                                  String_View *gateway_url);

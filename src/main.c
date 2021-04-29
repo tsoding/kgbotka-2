@@ -123,18 +123,10 @@ void sleep_ms(unsigned int milliseconds)
 #endif
 }
 
-String_View cws_message_chunk_to_sv(Cws_Message_Chunk chunk)
-{
-    return (String_View) {
-        .data = (const char *) chunk.payload,
-        .count = chunk.payload_len,
-    };
-}
-
 // TODO: Research on a possibility of using ETF for Discord instead of JSON
 // https://discord.com/developers/docs/topics/gateway#etfjson
 
-void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
+void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx, String_View token)
 {
     // https://discord.com/developers/docs/topics/gateway#connecting-to-the-gateway
     Socket *discord_socket = NULL;
@@ -181,6 +173,7 @@ void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
         .socket = discord_socket,
         .read = (Cws_Read) socket_read,
         .write = (Cws_Write) socket_write,
+        // TODO: separate memory region for websocket intermediate allocations
         .alloc = cws_malloc,
         .free = cws_free,
     };
@@ -192,27 +185,77 @@ void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx)
 
     log_info(log, "Connected to Discord successfully");
 
-    Cws_Message message = {0};
-    if (cws_read_message(&cws, &message) == 0) {
-        Json_Result result = parse_json_value_region_sv(
-                                 memory,
-                                 cws_message_chunk_to_sv(*message.chunks));
-        if (!result.is_error) {
-            Discord_Payload payload = {0};
-            if (discord_deserialize_payload(result.value, &payload)) {
-                log_info(log, "DISCORD SENT: %s", discord_opcode_as_cstr(payload.opcode));
-                if (payload.opcode == DISCORD_OPCODE_HELLO) {
-                    log_info(log, "HEARTBEAT INTERVAL: %"PRIu64,
-                             payload.hello.heartbeat_interval);
-                }
-            } else {
-                log_error(log, "Could not deserialize message from Discord");
-            }
-        } else {
-            log_error(log, "Could not parse WebSocket message from Discord");
+    // Receiving Hello
+    {
+        Discord_Payload payload = {0};
+        if (!receive_discord_payload_from_websocket(&cws, log, memory, &payload)) {
+            goto error;
         }
-    } else {
-        log_error(log, "Could not read a message from Discord: %s", cws_get_error_string(&cws));
+
+        log_info(log, "DISCORD SENT: %s", discord_opcode_as_cstr(payload.op));
+        if (payload.op != DISCORD_OPCODE_HELLO) {
+            log_error(log, "Discord sent something that is not %s",
+                      discord_opcode_as_cstr(DISCORD_OPCODE_HELLO));
+            goto error;
+        }
+
+        log_info(log, "HEARTBEAT INTERVAL: %"PRIu64, payload.d.hello.heartbeat_interval);
+    }
+
+    // Sending Identify
+    {
+        Discord_Payload payload = {
+            .op = DISCORD_OPCODE_IDENTIFY,
+            .d = {
+                .identify = {
+                    .token = token,
+                    .properties = {
+                        .os = SV("TempleOS"),
+                        .browser = SV("IE6"),
+                        .device = SV("Buttplug"),
+                    },
+                    .intents = 0,
+                }
+            }
+        };
+
+        Jim jim = {
+            .sink = memory,
+            .write = (Jim_Write) write_to_region,
+        };
+        size_t begin_size = memory->size;
+
+        serialize_discord_payload(&jim, payload);
+
+        if (jim.error != JIM_OK) {
+            log_error(log, "Could not serialize Discord identify payload: %s",
+                      jim_error_string(jim.error));
+            goto error;
+        }
+
+
+        if (cws_send_message(
+                    &cws,
+                    CWS_MESSAGE_TEXT,
+                    (const uint8_t*) (memory->buffer + begin_size),
+                    memory->size - begin_size,
+                    1024) < 0) {
+            log_error(log, "Could not send Discord identify payload: %d",
+                      cws.error);
+        }
+    }
+
+    // Receiving Ready
+    {
+        Discord_Payload payload = {0};
+
+        if (!receive_discord_payload_from_websocket(&cws, log, memory, &payload)) {
+            goto error;
+        }
+
+        log_info(log, "DISCORD SENT AFTER IDENTIFY:");
+        log_info(log, "op: %s", discord_opcode_as_cstr(payload.op));
+        log_info(log, "t: "SV_Fmt, SV_Arg(payload.t));
     }
 
 error:
@@ -242,9 +285,10 @@ int main(int argc, char **argv)
 #endif
 
     // Secret configuration
-    String_View secret_nickname = SV_NULL;
-    String_View secret_password = SV_NULL;
-    String_View secret_channel  = SV_NULL;
+    String_View twitch_secret_nickname = SV_NULL;
+    String_View twitch_secret_password = SV_NULL;
+    String_View twitch_secret_channel  = SV_NULL;
+    String_View discord_secret_token   = SV_NULL;
 
     // Parse secret.conf
     {
@@ -272,11 +316,11 @@ int main(int argc, char **argv)
             if (line.count > 0) {
                 String_View key = sv_trim(sv_chop_by_delim(&line, '='));
                 String_View value = sv_trim(line);
-                if (sv_eq(key, SV("nickname"))) {
-                    secret_nickname = value;
-                } else if (sv_eq(key, SV("password"))) {
-                    secret_password = value;
-                } else if (sv_eq(key, SV("channel"))) {
+                if (sv_eq(key, SV("twitch.nickname"))) {
+                    twitch_secret_nickname = value;
+                } else if (sv_eq(key, SV("twitch.password"))) {
+                    twitch_secret_password = value;
+                } else if (sv_eq(key, SV("twitch.channel"))) {
                     switch(value.data[0]) {
                     case '#':
                     case '&':
@@ -285,7 +329,9 @@ int main(int argc, char **argv)
                         log_error(&log, "`channel` must start with a '#' or '&' character");
                         goto error;
                     }
-                    secret_channel = value;
+                    twitch_secret_channel = value;
+                } else if (sv_eq(key, SV("discord.token"))) {
+                    discord_secret_token = value;
                 } else {
                     log_error(&log, "unknown key `"SV_Fmt"`", SV_Arg(key));
                     goto error;
@@ -293,18 +339,18 @@ int main(int argc, char **argv)
             }
         }
 
-        if (secret_nickname.data == NULL) {
-            log_error(&log, "`nickname` was not provided");
+        if (twitch_secret_nickname.data == NULL) {
+            log_error(&log, "`twitch.nickname` was not provided");
             goto error;
         }
 
-        if (secret_password.data == NULL) {
-            log_error(&log, "`password` was not provided");
+        if (twitch_secret_password.data == NULL) {
+            log_error(&log, "`twitch.password` was not provided");
             goto error;
         }
 
-        if (secret_channel.data == NULL) {
-            log_error(&log, "`channel` was not provided");
+        if (twitch_secret_channel.data == NULL) {
+            log_error(&log, "`twitch.channel` was not provided");
             goto error;
         }
 
@@ -391,14 +437,20 @@ reconnect: {
 
             log_info(&log, "Connected to Twitch IRC successfully");
 
-            irc_pass(&irc, secret_password);
-            irc_nick(&irc, secret_nickname);
+            irc_pass(&irc, twitch_secret_password);
+            irc_nick(&irc, twitch_secret_nickname);
             irc_cap_req(&irc, SV("twitch.tv/tags"));
-            irc_join(&irc, secret_channel);
+            irc_join(&irc, twitch_secret_channel);
         }
 
         // Connect to Discord
-        connect_discord(curl, cmd_region, &log, ctx);
+        {
+            if (discord_secret_token.data != NULL) {
+                connect_discord(curl, cmd_region, &log, ctx, discord_secret_token);
+            } else {
+                log_warning(&log, "No Discord token is provided in the configuration. Not trying to connect to Discord");
+            }
+        }
 
         reconnect_ms = 0;
     }
