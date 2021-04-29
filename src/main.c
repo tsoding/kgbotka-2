@@ -199,7 +199,7 @@ void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx, String_
             goto error;
         }
 
-        log_info(log, "HEARTBEAT INTERVAL: %"PRIu64, payload.d.hello.heartbeat_interval);
+        log_info(log, "HEARTBEAT INTERVAL: %" PRIu64, payload.d.hello.heartbeat_interval);
     }
 
     // Sending Identify
