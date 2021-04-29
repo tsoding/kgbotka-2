@@ -34,6 +34,7 @@
 #define TWITCH_HOST "irc.chat.twitch.tv"
 #define SECURE_TWITCH_PORT "6697"
 #define PLAIN_TWITCH_PORT "6667"
+#define MAX_RECONNECT_MS 4096000
 
 // http://www.iso-9899.info/n1570.html#5.1.2.3p5
 volatile sig_atomic_t sigint = 0;
@@ -360,20 +361,20 @@ int main(int argc, char **argv)
         log_info(&log, "Successfully allocated memory for commands");
     }
 
-    // TODO(#36): reconnect with an exponential backoff
-    // https://dev.twitch.tv/docs/irc/guide#re-connecting-to-twitch-irc
-    bool first_reconnect = true;
+    unsigned int reconnect_ms = 0;
 reconnect: {
+        sleep_ms(reconnect_ms);
         // Connect to IRC
         {
             irc.socket = socket_secure_connect(&log, ctx, TWITCH_HOST, SECURE_TWITCH_PORT, true);
 
             if (!irc.socket) {
-                if (!first_reconnect) {
-                    sleep_ms(1000);
+                if (reconnect_ms == 0) {
+                    reconnect_ms = 1000;
+                } else if (reconnect_ms < MAX_RECONNECT_MS) {
+                    reconnect_ms *= 2;
                 }
-                first_reconnect = false;
-                log_info(&log, "Trying to reconnect..");
+                log_info(&log, "Trying to reconnect.. (%dms)", reconnect_ms);
                 goto reconnect;
             }
 
@@ -388,7 +389,7 @@ reconnect: {
         // Connect to Discord
         connect_discord(curl, cmd_region, &log, ctx);
 
-        first_reconnect = true;
+        reconnect_ms = 0;
     }
 
     // IRC event loop
