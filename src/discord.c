@@ -181,7 +181,7 @@ bool receive_discord_payload_from_websocket(Cws *cws, Log *log, Region *memory, 
 
     Json_Result result = parse_json_value_region_sv(
                              memory,
-                             // TODO: receive_discord_payload_from_websocket assumes that the received WebSocket message has only one chunk
+                             // TODO(#39): receive_discord_payload_from_websocket assumes that the received WebSocket message has only one chunk
                              cws_message_chunk_to_sv(*message.chunks));
     if (result.is_error) {
         log_error(log, "Could not parse WebSocket message from Discord");
