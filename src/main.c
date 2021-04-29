@@ -29,6 +29,9 @@
 #define TZOZEN_IMPLEMENTATION
 #include "./thirdparty/tzozen.h"
 
+#define JIM_IMPLEMENTATION
+#include "./thirdparty/jim.h"
+
 #define ARRAY_LEN(xs) (sizeof(xs) / sizeof((xs)[0]))
 
 #define TWITCH_HOST "irc.chat.twitch.tv"
