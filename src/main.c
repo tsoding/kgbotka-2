@@ -174,7 +174,7 @@ void connect_discord(CURL *curl, Region *memory, Log *log, SSL_CTX *ctx, String_
         .socket = discord_socket,
         .read = (Cws_Read) socket_read,
         .write = (Cws_Write) socket_write,
-        // TODO: separate memory region for websocket intermediate allocations
+        // TODO(#41): separate memory region for websocket intermediate allocations
         .alloc = cws_malloc,
         .free = cws_free,
     };
